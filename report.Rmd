@@ -1,0 +1,27 @@
+---
+title: "Bayesian Data Analysis - Project Work"
+author: 
+- Jaan Tollander de Balsch
+- Samuel Piirainen
+data: ""
+output: 
+  pdf_document: 
+    latex_engine: xelatex
+    toc: yes
+    toc_depth: 1
+bibliography: bibliography.bib
+urlcolor: blue
+csl: https://raw.githubusercontent.com/citation-style-language/styles/master/harvard-anglia-ruskin-university.csl
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Subtitle
+@bayesian_data_analysis_2013
+
+@video_games_sales
+
+
+# References
