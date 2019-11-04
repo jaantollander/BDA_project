@@ -2,6 +2,9 @@
 *.pdf
 *.rds
 
+# Dataset
+*.csv
+
 ## R
 # History files
 .Rhistory
