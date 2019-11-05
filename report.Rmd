@@ -23,5 +23,107 @@ knitr::opts_chunk$set(echo = TRUE)
 
 @video_games_sales
 
+```{r setup, include=FALSE}
+library(ggplot2)
+library(analogue)
+library(tidyr)
+library(plyr)
+library(dplyr)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+
+# colClasses drops last column "age rating"
+table <- read.csv(
+  file="sales.csv", header=T, sep=",", fill=T, stringsAsFactors=F, colClasses=c(rep(NA, 15), "NULL"))
+
+# filter out "bad" platforms / years, group by platform
+data <- summarise(drop_na(group_by(filter(table, Year_of_Release >= 2010, Platform != "GBA", Platform != "GC"), Platform, Name, Year_of_Release, Global_Sales, Critic_Score)))
+```
+
+```{r}
+df.sales <- data.frame(year=data$Year_of_Release, sales=data$Global_Sales)
+df.scores <- data.frame(year=data$Year_of_Release, sales=data$Critic_Score)
+
+normalized_sum <- function(arr) {
+  return (sum(arr) / length(arr))
+}
+
+ggplot(df.sales, aes(x=year, y=sales)) + 
+  stat_summary(fun.y = normalized_sum, geom="point", colour = "blue")
+```
+
+```{stan output.var="sales_hierarchical"}
+data {
+  int<lower=0> N; // number of data points
+  int<lower=0> K; // number of groups
+  int<lower=1,upper=K> x[N]; // group indicator
+  vector[N] y; // sales
+  vector[N] z; // critic scores
+}
+parameters {
+  vector[K] mu_y;
+  vector[K] mu_z;
+  real<lower=0> sigma_y;
+  real<lower=0> sigma_z;
+}
+model {
+  y ~ normal(mu_y[x], sigma_y);
+  z ~ normal(mu_z[x], sigma_z);
+}
+generated quantities {
+}
+```
+
+```{r}
+unique(data$Platform)
+
+n_of_groups <- length(unique(data$Platform))
+n_of_rows <- nrow(data)
+data_points_y <- data$Global_Sales
+data_points_z <- data$Critic_Score
+
+# label each platform by integer for the Stan model
+integer_labels <- c("3DS"=1, "DS"=2, "PC"=3, "PS"=4, "PS2"=5, "PS3"=6, "PS4"=7, "PSP"=8, "PSV"=9, "Wii"=10, "WiiU"=11, "X360"=12, "XB"=13, "XOne"=14)
+group_indicators <- as.numeric(revalue(x=data$Platform, integer_labels))
+
+data_group <- list(
+  K=n_of_groups,
+  y=data_points_y,
+  z=data_points_z,
+  N=n_of_rows,
+  x=group_indicators
+)
+
+hierarchical_fit <- rstan::sampling(sales_hierarchical, data=data_group, iter=1000, chains=4)
+
+summary(hierarchical_fit)
+
+mu_y <- extract(hierarchical_fit)$mu_y
+mu_z <- extract(hierarchical_fit)$mu_z
+
+ratio_pc <- mu_y[,3] / mu_z[,3]
+ratio_ps3 <- mu_y[,6] / mu_z[,6]
+ratio_x360 <- mu_y[,12] / mu_z[,12]
+ratio_wii <- mu_y[,10] / mu_z[,10]
+ratio_ds <- mu_y[,2] / mu_z[,2]
+ratio_psv <- mu_y[,9] / mu_z[,9]
+
+df.pc <- data.frame(ratio=ratio_pc)
+df.x360 <- data.frame(ratio=ratio_x360)
+df.ps3 <- data.frame(ratio=ratio_ps3)
+df.wii <- data.frame(ratio=ratio_wii)
+df.ds <- data.frame(ratio=ratio_ds)
+df.psv <- data.frame(ratio=ratio_psv)
+
+ggplot(df.pc, aes(x=ratio)) + geom_histogram() + xlab("PC Ratio")
+ggplot(df.x360, aes(x=ratio)) + geom_histogram() + xlab("X360 Ratio")
+ggplot(df.ps3, aes(x=ratio)) + geom_histogram() + xlab("PS3 Ratio")
+ggplot(df.wii, aes(x=ratio)) + geom_histogram() + xlab("Wii Ratio")
+ggplot(df.ds, aes(x=ratio)) + geom_histogram() + xlab("DS Ratio")
+ggplot(df.psv, aes(x=ratio)) + geom_histogram() + xlab("PSV Ratio")
+```
+
+Graph seems to suggest that sales correlate with critic scores. Interestingly the correlation varies by platform. The more "hardcore" platforms have less variance in ratio
 
 # References
