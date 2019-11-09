@@ -42,6 +42,11 @@ data <- summarise(drop_na(group_by(filter(table, Year_of_Release >= 2010, Platfo
 ```
 
 ```{r}
+# converts a factor into an integer...
+as.numeric.factor <- function(x) {
+  as.numeric(levels(x))[x]
+}
+
 df.sales <- data.frame(year=data$Year_of_Release, sales=data$Global_Sales)
 df.scores <- data.frame(year=data$Year_of_Release, sales=data$Critic_Score)
 
@@ -49,9 +54,69 @@ normalized_sum <- function(arr) {
   return (sum(arr) / length(arr))
 }
 
-ggplot(df.sales, aes(x=year, y=sales)) + 
-  stat_summary(fun.y = normalized_sum, geom="point", colour = "blue")
+ggplot(df.sales, aes(x=as.numeric.factor(year), y=sales)) + 
+  stat_summary(fun.y = normalized_sum, geom="point", colour = "blue") + geom_smooth(method='lm') + xlab("Year") + ylab("Sales")
 ```
+
+We normalize the yearly total sales by the length of array of the respective year of sales and see that there's a clear decline in yearly sales.
+
+## Separate model for sales and scores
+
+```{stan output.var="sales_separate"}
+data {
+  int<lower=0> N; // number of data points
+  vector[N] y; // sales
+  vector[N] z; // critic scores
+}
+parameters {
+  real mu_y;
+  real mu_z;
+  real<lower=0> sigma_y;
+  real<lower=0> sigma_z;
+}
+model {
+  y ~ normal(mu_y, sigma_y);
+  z ~ normal(mu_z, sigma_z);
+}
+generated quantities {
+}
+```
+
+```{r}
+# sample from the separate model for a platform
+sampling_for_platform <- function(data, platformName, iter=1000, chains=4) {
+  data <- filter(data, Platform == platformName)
+  n_of_rows <- nrow(data)
+  data_points_y <- data$Global_Sales
+  data_points_z <- data$Critic_Score
+  
+  data_group <- list(
+    N=n_of_rows,
+    y=data_points_y,
+    z=data_points_z
+  )
+  
+  return (rstan::sampling(sales_separate, data=data_group, iter=iter, chains=chains))
+}
+```
+
+```{r}
+pc_fit <- sampling_for_platform(data, "PC")
+ds_fit <- sampling_for_platform(data, "DS")
+
+sales_pc <- extract(pc_fit)$mu_y
+scores_pc <- extract(pc_fit)$mu_z
+sales_ds <- extract(ds_fit)$mu_y
+scores_ds <- extract(ds_fit)$mu_z
+```
+
+```{r}
+df <- data.frame(sales_pc=sales_pc, scores_pc=scores_pc, sales_ds=sales_ds, scores_ds=scores_ds)
+ggplot(df) + geom_point(aes(x=sales_pc, y=scores_pc, colour="PC")) + geom_point(aes(x=sales_ds, y=scores_ds, colour="DS")) +
+  scale_colour_manual(values=c("PC" = "red", "DS" = "blue")) + xlab("Sales") + ylab("Scores")
+```
+
+## Hierarchical model for sales and scores
 
 ```{stan output.var="sales_hierarchical"}
 data {
@@ -99,7 +164,6 @@ hierarchical_fit <- rstan::sampling(sales_hierarchical, data=data_group, iter=10
 ```{r}
 mu_y <- extract(hierarchical_fit)$mu_y
 mu_z <- extract(hierarchical_fit)$mu_z
-
 ratio_pc <- mu_y[,3] / mu_z[,3]
 ratio_ps3 <- mu_y[,6] / mu_z[,6]
 ratio_x360 <- mu_y[,12] / mu_z[,12]
@@ -123,7 +187,7 @@ ggplot(df.psv, aes(x=ratio)) + geom_histogram() + xlab("PSV Ratio")
 
 ```
 
-Graph seems to suggest that sales correlate with critic scores. Interestingly the correlation varies by platform. The more "hardcore" platforms have less variance in ratio
+Graph seems to suggest that sales correlate with critic scores. Interestingly the correlation varies by platform. The more "hardcore" platforms have less variance in ratio.
 
 ```{r}
 df <- data.frame(sales_pc=mu_y[,3], scores_pc=mu_z[,3], sales_ds=mu_y[,2], scores_ds=mu_z[,2])
@@ -131,6 +195,6 @@ ggplot(df) + geom_point(aes(x=sales_pc, y=scores_pc, colour="PC")) + geom_point(
   scale_colour_manual(values=c("PC" = "red", "DS" = "blue")) + xlab("Sales") + ylab("Scores")
 ```
 
-The scatterplot also shows how the Nintendo DS sales have far more variance in terms of sales in relation to scores.
+The scatterplot also shows how the Nintendo DS sales have far more variance in terms of sales in relation to scores. Sales for Nintendo DS are higher on average, although, again, have more variance than PC games.
 
 # References
