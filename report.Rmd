@@ -35,7 +35,7 @@ rstan_options(auto_write = TRUE)
 
 # colClasses drops last column "age rating"
 table <- read.csv(
-  file="sales.csv", header=T, sep=",", fill=T, stringsAsFactors=F, colClasses=c(rep(NA, 15), "NULL"))
+  file="Video_Games_Sales_as_at_22_Dec_2016.csv", header=T, sep=",", fill=T, stringsAsFactors=F, colClasses=c(rep(NA, 15), "NULL"))
 
 # filter out "bad" platforms / years, group by platform
 data <- summarise(drop_na(group_by(filter(table, Year_of_Release >= 2010, Platform != "GBA", Platform != "GC"), Platform, Name, Year_of_Release, Global_Sales, Critic_Score)))
@@ -76,8 +76,6 @@ generated quantities {
 ```
 
 ```{r}
-unique(data$Platform)
-
 n_of_groups <- length(unique(data$Platform))
 n_of_rows <- nrow(data)
 data_points_y <- data$Global_Sales
@@ -96,9 +94,9 @@ data_group <- list(
 )
 
 hierarchical_fit <- rstan::sampling(sales_hierarchical, data=data_group, iter=1000, chains=4)
+```
 
-summary(hierarchical_fit)
-
+```{r}
 mu_y <- extract(hierarchical_fit)$mu_y
 mu_z <- extract(hierarchical_fit)$mu_z
 
@@ -110,10 +108,10 @@ ratio_ds <- mu_y[,2] / mu_z[,2]
 ratio_psv <- mu_y[,9] / mu_z[,9]
 
 df.pc <- data.frame(ratio=ratio_pc)
+df.ds <- data.frame(ratio=ratio_ds)
 df.x360 <- data.frame(ratio=ratio_x360)
 df.ps3 <- data.frame(ratio=ratio_ps3)
 df.wii <- data.frame(ratio=ratio_wii)
-df.ds <- data.frame(ratio=ratio_ds)
 df.psv <- data.frame(ratio=ratio_psv)
 
 ggplot(df.pc, aes(x=ratio)) + geom_histogram() + xlab("PC Ratio")
@@ -122,8 +120,17 @@ ggplot(df.ps3, aes(x=ratio)) + geom_histogram() + xlab("PS3 Ratio")
 ggplot(df.wii, aes(x=ratio)) + geom_histogram() + xlab("Wii Ratio")
 ggplot(df.ds, aes(x=ratio)) + geom_histogram() + xlab("DS Ratio")
 ggplot(df.psv, aes(x=ratio)) + geom_histogram() + xlab("PSV Ratio")
+
 ```
 
 Graph seems to suggest that sales correlate with critic scores. Interestingly the correlation varies by platform. The more "hardcore" platforms have less variance in ratio
+
+```{r}
+df <- data.frame(sales_pc=mu_y[,3], scores_pc=mu_z[,3], sales_ds=mu_y[,2], scores_ds=mu_z[,2])
+ggplot(df) + geom_point(aes(x=sales_pc, y=scores_pc, colour="PC")) + geom_point(aes(x=sales_ds, y=scores_ds, colour="DS")) +
+  scale_colour_manual(values=c("PC" = "red", "DS" = "blue")) + xlab("Sales") + ylab("Scores")
+```
+
+The scatterplot also shows how the Nintendo DS sales have far more variance in terms of sales in relation to scores.
 
 # References
