@@ -1,9 +1,7 @@
 ## Project
 *.pdf
 *.rds
-
-# Dataset
-*.csv
+*.html
 
 ## R
 # History files
