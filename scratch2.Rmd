@@ -1,0 +1,38 @@
+---
+title: "R Notebook"
+---
+
+```{r, message=FALSE}
+library(ggplot2)
+#library(analogue)
+#library(tidyr)
+#library(plyr)
+#library(dplyr)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+Load values
+```{r}
+table <- read.csv(
+  file="Video_Games_Sales_as_at_22_Dec_2016.csv", 
+  header=T, 
+  sep=",", 
+  fill=T, 
+  stringsAsFactors=F, 
+  #colClasses=c(rep(NA, 15), "NULL")
+)
+```
+
+* `Platform`
+* `Year_of_Release`
+* `Global_Sales`
+* `Critic_Score`
+* `User_Score`
+
+Filter values
+```{r}
+# TODO: Platform, Year_of_Release, Global_Sales, Critic_score
+
+```
