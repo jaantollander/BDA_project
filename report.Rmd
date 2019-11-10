@@ -18,11 +18,25 @@ csl: https://raw.githubusercontent.com/citation-style-language/styles/master/har
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Subtitle
 @bayesian_data_analysis_2013
 
-@video_games_sales
 
+# The dataset
+The dataset consists of *video games sales data* as of December 2016 scraped from Metacritic by @video_games_sales. In the dataset, each row represents data for a single game. The relevant fields for each row in the dataset are
+
+* `Platform`: The abbreviation of the platform for playing the game.
+* `Year_of_Release`: The year that the game was released. It contains games released between the years 1985 and 2016.
+* `Global_Sales`: The number of game sales in millions.
+* `Critic_Score`: A score given by critics. A number between 0 and 100.
+* `User_Score`: A score given by users. A number between 0 and 10.
+
+In this analysis, we are interested in games released between the years 2000 - 2015. Also, we focused on the most popular platform in our analysis and filtered the less popular ones.
+
+
+# The analysis Problem
+
+
+# Description of the models
 
 
 # References
