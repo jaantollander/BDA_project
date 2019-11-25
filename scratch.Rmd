@@ -37,25 +37,35 @@ ggplot(df.sales, aes(x=as.numeric.factor(year), y=sales)) +
   stat_summary(fun.y = normalized_sum, geom="point", colour = "blue") + geom_smooth(method='lm') + xlab("Year") + ylab("Sales")
 ```
 
-We normalize the yearly total sales by the length of array of the respective year of sales and see that there's a clear decline in yearly sales.
+## Stan models
 
-## Separate model for sales and scores
+We use three models in this report; a separate, pooled and an hierarchical model. In the separate model each platform is represented by a separate model with its own standard deviation $\sigma_j$. In the pooled model we treat all platforms as equal. The whole datasets shares a single mean $\mu$ and standard deviation $\sigma$. In the hierarchical model we formulate a model where each group represents a single video game platform. It uses a shared standard deviation $\sigma$ between all the platforms.
+
+Each model creates fits for both video game sales and critic scores.
+
+### Stan model prior choices
+
+We give the scores an adjustable prior, because it has a scale that is common to each platform (Between 0 and 100).
+
+We choose an informative prior mean of 70 for the scores, because this is reasonably close to the sample mean for Critic_Score of `r mean(data$Critic_Score)`. We set the prior standard deviation to 0.15 to represent a slight amount of ignorance. We are saying that our prior guess for the critic score mean could be off by a factor of $\exp(0.2)=1.2$. (source: http://www.stat.columbia.edu/~gelman/research/unpublished/objectivityr3.pdf slide 13)
+
+### Separate model for sales and scores
 
 ```{stan output.var="sales_separate"}
 data {
   int<lower=0> N; // number of data points
-  vector[N] y; // sales
-  vector[N] z; // critic scores
+  vector[N] sales; // sales
+  vector[N] scores; // critic scores
 }
 parameters {
-  real mu_y;
-  real mu_z;
-  real<lower=0> sigma_y;
-  real<lower=0> sigma_z;
+  real mu_sales;
+  real mu_scores;
+  real<lower=0> sigma_sales;
+  real<lower=0> sigma_scores;
 }
 model {
-  y ~ normal(mu_y, sigma_y);
-  z ~ normal(mu_z, sigma_z);
+  sales ~ normal(mu_sales, sigma_sales);
+  scores ~ normal(mu_scores, sigma_scores);
 }
 generated quantities {
 }
@@ -66,13 +76,13 @@ generated quantities {
 sampling_for_platform <- function(data, platformName, iter=1000, chains=4) {
   data <- filter(data, Platform == platformName)
   n_of_rows <- nrow(data)
-  data_points_y <- data$Global_Sales
-  data_points_z <- data$Critic_Score
+  data_points_sales <- data$Global_Sales
+  data_points_scores <- data$Critic_Score
   
   data_group <- list(
     N=n_of_rows,
-    y=data_points_y,
-    z=data_points_z
+    sales=data_points_sales,
+    scores=data_points_scores
   )
   
   return (rstan::sampling(sales_separate, data=data_group, iter=iter, chains=chains))
@@ -83,10 +93,10 @@ sampling_for_platform <- function(data, platformName, iter=1000, chains=4) {
 pc_fit <- sampling_for_platform(data, "PC")
 ds_fit <- sampling_for_platform(data, "DS")
 
-sales_pc <- extract(pc_fit)$mu_y
-scores_pc <- extract(pc_fit)$mu_z
-sales_ds <- extract(ds_fit)$mu_y
-scores_ds <- extract(ds_fit)$mu_z
+sales_pc <- extract(pc_fit)$mu_sales
+scores_pc <- extract(pc_fit)$mu_scores
+sales_ds <- extract(ds_fit)$mu_sales
+scores_ds <- extract(ds_fit)$mu_scores
 ```
 
 ```{r}
@@ -95,25 +105,28 @@ ggplot(df) + geom_point(aes(x=sales_pc, y=scores_pc, colour="PC")) + geom_point(
   scale_colour_manual(values=c("PC" = "red", "DS" = "blue")) + xlab("Sales") + ylab("Scores")
 ```
 
-## Hierarchical model for sales and scores
+### Hierarchical model for sales and scores
 
-```{stan output.var="sales_hierarchical"}
+```{stan output.var="sales__hierarchical_priors"}
 data {
   int<lower=0> N; // number of data points
   int<lower=0> K; // number of groups
   int<lower=1,upper=K> x[N]; // group indicator
-  vector[N] y; // sales
-  vector[N] z; // critic scores
+  vector[N] sales; // sales
+  vector[N] scores; // critic scores
+  real pmu_scores; // prior mean
+  real psigma_scores; // prior std
 }
 parameters {
-  vector[K] mu_y;
-  vector[K] mu_z;
-  real<lower=0> sigma_y;
-  real<lower=0> sigma_z;
+  vector[K] mu_sales;
+  vector[K] mu_scores;
+  real<lower=0> sigma_sales;
+  real<lower=0> sigma_scores;
 }
 model {
-  y ~ normal(mu_y[x], sigma_y);
-  z ~ normal(mu_z[x], sigma_z);
+  mu_scores ~ normal(pmu_scores, psigma_scores);
+  sales ~ normal(mu_sales[x], sigma_sales);
+  scores ~ normal(mu_scores[x], sigma_scores);
 }
 generated quantities {
 }
@@ -122,8 +135,8 @@ generated quantities {
 ```{r}
 n_of_groups <- length(unique(data$Platform))
 n_of_rows <- nrow(data)
-data_points_y <- data$Global_Sales
-data_points_z <- data$Critic_Score
+data_points_sales <- data$Global_Sales
+data_points_scores <- data$Critic_Score
 
 # label each platform by integer for the Stan model
 integer_labels <- c("3DS"=1, "DS"=2, "PC"=3, "PS"=4, "PS2"=5, "PS3"=6, "PS4"=7, "PSP"=8, "PSV"=9, "Wii"=10, "WiiU"=11, "X360"=12, "XB"=13, "XOne"=14)
@@ -131,18 +144,20 @@ group_indicators <- as.numeric(revalue(x=data$Platform, integer_labels))
 
 data_group <- list(
   K=n_of_groups,
-  y=data_points_y,
-  z=data_points_z,
+  sales=data_points_sales,
+  scores=data_points_scores,
   N=n_of_rows,
-  x=group_indicators
+  x=group_indicators,
+  pmu_scores=70,
+  psigma_scores=0.2
 )
 
-hierarchical_fit <- rstan::sampling(sales_hierarchical, data=data_group, iter=1000, chains=4)
+hierarchical_fit <- rstan::sampling(sales__hierarchical_priors, data=data_group, iter=1000, chains=4)
 ```
 
 ```{r}
-mu_y <- extract(hierarchical_fit)$mu_y
-mu_z <- extract(hierarchical_fit)$mu_z
+mu_y <- extract(hierarchical_fit)$mu_sales
+mu_z <- extract(hierarchical_fit)$mu_scores
 ratio_pc <- mu_y[,3] / mu_z[,3]
 ratio_ps3 <- mu_y[,6] / mu_z[,6]
 ratio_x360 <- mu_y[,12] / mu_z[,12]
@@ -157,16 +172,21 @@ df.ps3 <- data.frame(ratio=ratio_ps3)
 df.wii <- data.frame(ratio=ratio_wii)
 df.psv <- data.frame(ratio=ratio_psv)
 
-ggplot(df.pc, aes(x=ratio)) + geom_histogram() + xlab("PC Ratio")
-ggplot(df.x360, aes(x=ratio)) + geom_histogram() + xlab("X360 Ratio")
-ggplot(df.ps3, aes(x=ratio)) + geom_histogram() + xlab("PS3 Ratio")
-ggplot(df.wii, aes(x=ratio)) + geom_histogram() + xlab("Wii Ratio")
-ggplot(df.ds, aes(x=ratio)) + geom_histogram() + xlab("DS Ratio")
-ggplot(df.psv, aes(x=ratio)) + geom_histogram() + xlab("PSV Ratio")
+ggplot(df.pc, aes(x=as.numeric(rownames(df.pc)), y=ratio)) + geom_line() + xlab("PC")
+#ggplot(df.x360, aes(x=as.numeric(rownames(df.x360)), y=ratio)) + geom_line() + xlab("X360")
+#ggplot(df.ps3, aes(x=as.numeric(rownames(df.ps3)), y=ratio)) + geom_line() + xlab("PS3")
+ggplot(df.wii, aes(x=as.numeric(rownames(df.wii)), y=ratio)) + geom_line() + xlab("Wii")
+#ggplot(df.ds, aes(x=as.numeric(rownames(df.ds)), y=ratio)) + geom_line() + xlab("DS")
+#ggplot(df.psv, aes(x=as.numeric(rownames(df.psv)), y=ratio)) + geom_line() + xlab("PSV")
 
 ```
 
 Graph seems to suggest that sales correlate with critic scores. Interestingly the correlation varies by platform. The more "hardcore" platforms have less variance in ratio.
+
+```{r}
+df <- data.frame(xpc=as.numeric(rownames(df.pc)), xwii=as.numeric(rownames(df.wii)), ypc=ratio_pc, ywii=ratio_wii)
+ggplot(df) + geom_line(aes(x=xpc, y=ypc, colour="PC")) + geom_line(aes(x=xwii, y=ywii, colour="Wii")) + xlab("index") + ylab("ratio")
+```
 
 ```{r}
 df <- data.frame(sales_pc=mu_y[,3], scores_pc=mu_z[,3], sales_ds=mu_y[,2], scores_ds=mu_z[,2])
