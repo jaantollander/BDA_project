@@ -9,6 +9,7 @@ library(tidyr)
 library(plyr)
 library(dplyr)
 library(rstan)
+library(loo)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 
@@ -39,9 +40,9 @@ ggplot(df.sales, aes(x=as.numeric.factor(year), y=sales)) +
 
 ## Stan models
 
-We use three models in this report; a separate, pooled and an hierarchical model. In the separate model each platform is represented by a separate model with its own standard deviation $\sigma_j$. In the pooled model we treat all platforms as equal. The whole datasets shares a single mean $\mu$ and standard deviation $\sigma$. In the hierarchical model we formulate a model where each group represents a single video game platform. It uses a shared standard deviation $\sigma$ between all the platforms.
+We use three models in this report; a separate, pooled and a hierarchical model. In the separate model each platform is represented by a separate model with its own standard deviation $\sigma_j$. In the pooled model we treat all platforms as equal. The whole datasets shares a single mean $\mu$ and standard deviation $\sigma$. In the hierarchical model we formulate a model where each group represents a single video game platform. It uses a shared standard deviation $\sigma$ between all the platforms.
 
-Each model creates fits for both video game sales and critic scores.
+Each model finds fits for both video game sales and critic scores.
 
 ### Stan model prior choices
 
@@ -49,13 +50,48 @@ We give the scores an adjustable prior, because it has a scale that is common to
 
 We choose an informative prior mean of 70 for the scores, because this is reasonably close to the sample mean for Critic_Score of `r mean(data$Critic_Score)`. We set the prior standard deviation to 0.15 to represent a slight amount of ignorance. We are saying that our prior guess for the critic score mean could be off by a factor of $\exp(0.2)=1.2$. (source: http://www.stat.columbia.edu/~gelman/research/unpublished/objectivityr3.pdf slide 13)
 
-### Separate model for sales and scores
+### Model selection
 
 ```{stan output.var="sales_separate"}
 data {
   int<lower=0> N; // number of data points
+  int<lower=0> K; // number of groups
+  int<lower=1,upper=K> x[N]; // group indicator
   vector[N] sales; // sales
   vector[N] scores; // critic scores
+  real pmu_scores; // prior mean
+  real psigma_scores; // prior std
+}
+parameters {
+  vector[K] mu_sales;
+  vector[K] mu_scores;
+  real<lower=0> sigma_sales[K];
+  real<lower=0> sigma_scores[K];
+}
+model {
+  mu_scores ~ normal(pmu_scores, psigma_scores);
+  sales ~ normal(mu_sales[x], sigma_sales[x]);
+  scores ~ normal(mu_scores[x], sigma_scores[x]);
+}
+generated quantities {
+  vector[N] sales_log_lik;
+  vector[N] scores_log_lik;
+  for (i in 1:N) {
+    sales_log_lik[i] = normal_lpdf(sales[i] | mu_sales[x[i]], sigma_sales[x[i]]);
+  }
+  for (i in 1:N) {
+    scores_log_lik[i] = normal_lpdf(scores[i] | mu_scores[x[i]], sigma_scores[x[i]]);
+  }
+}
+```
+
+```{stan output.var="sales_pooled"}
+data {
+  int<lower=0> N; // number of data points
+  vector[N] sales; // sales
+  vector[N] scores; // critic scores
+  real pmu_scores; // prior mean
+  real psigma_scores; // prior std
 }
 parameters {
   real mu_sales;
@@ -64,50 +100,23 @@ parameters {
   real<lower=0> sigma_scores;
 }
 model {
+  mu_scores ~ normal(pmu_scores, psigma_scores);
   sales ~ normal(mu_sales, sigma_sales);
   scores ~ normal(mu_scores, sigma_scores);
 }
 generated quantities {
+  vector[N] sales_log_lik;
+  vector[N] scores_log_lik;
+  for (i in 1:N) {
+    sales_log_lik[i] = normal_lpdf(sales[i] | mu_sales, sigma_sales);
+  }
+  for (i in 1:N) {
+    scores_log_lik[i] = normal_lpdf(scores[i] | mu_scores, sigma_scores);
+  }
 }
 ```
 
-```{r}
-# sample from the separate model for a platform
-sampling_for_platform <- function(data, platformName, iter=1000, chains=4) {
-  data <- filter(data, Platform == platformName)
-  n_of_rows <- nrow(data)
-  data_points_sales <- data$Global_Sales
-  data_points_scores <- data$Critic_Score
-  
-  data_group <- list(
-    N=n_of_rows,
-    sales=data_points_sales,
-    scores=data_points_scores
-  )
-  
-  return (rstan::sampling(sales_separate, data=data_group, iter=iter, chains=chains))
-}
-```
-
-```{r}
-pc_fit <- sampling_for_platform(data, "PC")
-ds_fit <- sampling_for_platform(data, "DS")
-
-sales_pc <- extract(pc_fit)$mu_sales
-scores_pc <- extract(pc_fit)$mu_scores
-sales_ds <- extract(ds_fit)$mu_sales
-scores_ds <- extract(ds_fit)$mu_scores
-```
-
-```{r}
-df <- data.frame(sales_pc=sales_pc, scores_pc=scores_pc, sales_ds=sales_ds, scores_ds=scores_ds)
-ggplot(df) + geom_point(aes(x=sales_pc, y=scores_pc, colour="PC")) + geom_point(aes(x=sales_ds, y=scores_ds, colour="DS")) +
-  scale_colour_manual(values=c("PC" = "red", "DS" = "blue")) + xlab("Sales") + ylab("Scores")
-```
-
-### Hierarchical model for sales and scores
-
-```{stan output.var="sales__hierarchical_priors"}
+```{stan output.var="sales_hierarchical"}
 data {
   int<lower=0> N; // number of data points
   int<lower=0> K; // number of groups
@@ -129,7 +138,73 @@ model {
   scores ~ normal(mu_scores[x], sigma_scores);
 }
 generated quantities {
+  vector[N] sales_log_lik;
+  vector[N] scores_log_lik;
+  for (i in 1:N) {
+    sales_log_lik[i] = normal_lpdf(sales[i] | mu_sales[x[i]], sigma_sales);
+  }
+  for (i in 1:N) {
+    scores_log_lik[i] = normal_lpdf(scores[i] | mu_scores[x[i]], sigma_scores);
+  }
 }
+```
+
+We use the PSIS-LOO -method to asses the predictive performance of the pooled, separate and hierarchical
+Gaussian models in the video game sales dataset. Computations are performed on the R PSIS-LOO implementation, package "loo".
+
+### Separate model for sales and scores
+
+```{r}
+n_of_groups <- length(unique(data$Platform))
+n_of_rows <- nrow(data)
+data_points_sales <- data$Global_Sales
+data_points_scores <- data$Critic_Score
+
+# label each platform by integer for the Stan model
+integer_labels <- c("3DS"=1, "DS"=2, "PC"=3, "PS"=4, "PS2"=5, "PS3"=6, "PS4"=7, "PSP"=8, "PSV"=9, "Wii"=10, "WiiU"=11, "X360"=12, "XB"=13, "XOne"=14)
+group_indicators <- as.numeric(revalue(x=data$Platform, integer_labels))
+
+data_group <- list(
+  K=n_of_groups,
+  sales=data_points_sales,
+  scores=data_points_scores,
+  N=n_of_rows,
+  x=group_indicators,
+  pmu_scores=70,
+  psigma_scores=0.2
+)
+
+separate_fit <- rstan::sampling(sales_separate, data=data_group, iter=1000, chains=4)
+
+separate_log_lik_sales <- extract_log_lik(separate_fit, parameter_name="sales_log_lik")
+separate_rel_n_eff_sales <- relative_eff(exp(separate_log_lik_sales), chain_id=rep(1:4, each=500))
+separate_loo_sales <- loo(separate_log_lik_sales, r_eff=separate_rel_n_eff_sales)
+separate_log_lik_scores <- extract_log_lik(separate_fit, parameter_name="scores_log_lik")
+separate_rel_n_eff_scores <- relative_eff(exp(separate_log_lik_scores), chain_id=rep(1:4, each=500))
+separate_loo_scores <- loo(separate_log_lik_scores, r_eff=separate_rel_n_eff_scores)
+```
+
+```{r}
+n_of_rows <- nrow(data)
+data_points_sales <- data$Global_Sales
+data_points_scores <- data$Critic_Score
+
+data_group <- list(
+  sales=data_points_sales,
+  scores=data_points_scores,
+  N=n_of_rows,
+  pmu_scores=70,
+  psigma_scores=0.2
+)
+
+pooled_fit <- rstan::sampling(sales_pooled, data=data_group, iter=1000, chains=4)
+
+pooled_log_lik_sales <- extract_log_lik(pooled_fit, parameter_name="sales_log_lik")
+pooled_rel_n_eff_sales <- relative_eff(exp(pooled_log_lik_sales), chain_id=rep(1:4, each=500))
+pooled_loo_sales <- loo(pooled_log_lik_sales, r_eff=pooled_rel_n_eff_sales)
+pooled_log_lik_scores <- extract_log_lik(pooled_fit, parameter_name="scores_log_lik")
+pooled_rel_n_eff_scores <- relative_eff(exp(pooled_log_lik_scores), chain_id=rep(1:4, each=500))
+pooled_loo_scores <- loo(pooled_log_lik_scores, r_eff=pooled_rel_n_eff_scores)
 ```
 
 ```{r}
@@ -152,8 +227,80 @@ data_group <- list(
   psigma_scores=0.2
 )
 
-hierarchical_fit <- rstan::sampling(sales__hierarchical_priors, data=data_group, iter=1000, chains=4)
+hierarchical_fit <- rstan::sampling(sales_hierarchical, data=data_group, iter=1000, chains=4)
+
+hierarchical_log_lik_sales <- extract_log_lik(hierarchical_fit, parameter_name="sales_log_lik")
+hierarchical_rel_n_eff_sales <- relative_eff(exp(hierarchical_log_lik_sales), chain_id=rep(1:4, each=500))
+hierarchical_loo_sales <- loo(hierarchical_log_lik_sales, r_eff=hierarchical_rel_n_eff_sales)
+hierarchical_log_lik_scores <- extract_log_lik(hierarchical_fit, parameter_name="scores_log_lik")
+hierarchical_rel_n_eff_scores <- relative_eff(exp(hierarchical_log_lik_scores), chain_id=rep(1:4, each=500))
+hierarchical_loo_scores <- loo(hierarchical_log_lik_scores, r_eff=hierarchical_rel_n_eff_scores)
 ```
+
+```{r}
+compare_sales <- loo_compare(x=list(pooled_loo_sales, separate_loo_sales, hierarchical_loo_sales))
+compare_scores <- loo_compare(x=list(pooled_loo_scores, separate_loo_scores, hierarchical_loo_scores))
+compare_sales
+compare_scores
+```
+
+We see that the separate model has the largest elpd by a large difference to the pooled and hierarchical models in regards to both of our variables, sales and scores. Thus the PSIS-LOO method strongly suggests that the separate model produces the most reliable results.
+
+```{r}
+# maybe check pareto K here? 
+
+#pooled_k <- pooled_loo$diagnostics$pareto_k
+#separate_k <- separate_loo$diagnostics$pareto_k
+#hierarchical_k <- hierarchical_loo$diagnostics$pareto_k
+#df <- data.frame(x=pooled_k)
+#ggplot(df, aes(x=df$x)) + geom_histogram() + xlab("Pooled pareto k")
+```
+
+```{r}
+mu_y <- extract(separate_fit)$mu_sales
+mu_z <- extract(separate_fit)$mu_scores
+ratio_pc <- mu_y[,3] / mu_z[,3]
+ratio_ps3 <- mu_y[,6] / mu_z[,6]
+ratio_x360 <- mu_y[,12] / mu_z[,12]
+ratio_wii <- mu_y[,10] / mu_z[,10]
+ratio_ds <- mu_y[,2] / mu_z[,2]
+ratio_psv <- mu_y[,9] / mu_z[,9]
+
+df.pc <- data.frame(ratio=ratio_pc)
+df.ds <- data.frame(ratio=ratio_ds)
+df.x360 <- data.frame(ratio=ratio_x360)
+df.ps3 <- data.frame(ratio=ratio_ps3)
+df.wii <- data.frame(ratio=ratio_wii)
+df.psv <- data.frame(ratio=ratio_psv)
+
+ggplot(df.pc, aes(x=as.numeric(rownames(df.pc)), y=ratio)) + geom_line() + xlab("PC")
+#ggplot(df.x360, aes(x=as.numeric(rownames(df.x360)), y=ratio)) + geom_line() + xlab("X360")
+#ggplot(df.ps3, aes(x=as.numeric(rownames(df.ps3)), y=ratio)) + geom_line() + xlab("PS3")
+ggplot(df.wii, aes(x=as.numeric(rownames(df.wii)), y=ratio)) + geom_line() + xlab("Wii")
+#ggplot(df.ds, aes(x=as.numeric(rownames(df.ds)), y=ratio)) + geom_line() + xlab("DS")
+#ggplot(df.psv, aes(x=as.numeric(rownames(df.psv)), y=ratio)) + geom_line() + xlab("PSV")
+```
+
+```{r}
+df <- data.frame(sales_pc=mu_y[,3], scores_pc=mu_z[,3], sales_ds=mu_y[,2], scores_ds=mu_z[,2])
+ggplot(df) + geom_point(aes(x=sales_pc, y=scores_pc, colour="PC")) + geom_point(aes(x=sales_ds, y=scores_ds, colour="DS")) +
+  scale_colour_manual(values=c("PC" = "red", "DS" = "blue")) + xlab("Sales") + ylab("Scores")
+```
+
+### Pooled model for sales and scores
+
+```{r}
+mu_y <- extract(pooled_fit)$mu_sales
+mu_z <- extract(pooled_fit)$mu_scores
+ratio_pooled <- mu_y / mu_z
+
+df.pooled <- data.frame(ratio=ratio_pooled)
+
+ggplot(df.pooled, aes(x=as.numeric(rownames(df.pooled)), y=ratio)) + geom_line() + xlab("Pooled")
+
+```
+
+### Hierarchical model for sales and scores
 
 ```{r}
 mu_y <- extract(hierarchical_fit)$mu_sales
