@@ -1,5 +1,5 @@
 ---
-title: "Bayesian Data Analysis - Project Work"
+title: Analysing Critic Scores as a Predictor of Video Game Sales
 author: 
 - Jaan Tollander de Balsch
 - Samuel Piirainen
@@ -18,7 +18,18 @@ csl: https://raw.githubusercontent.com/citation-style-language/styles/master/har
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-@bayesian_data_analysis_2013
+Import the required libraries and set Stan options.
+```{r, message = FALSE}
+library(ggplot2)
+library(analogue)
+library(tidyr)
+library(plyr)
+library(dplyr)
+library(rstan)
+library(loo)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
 
 
 # The dataset
@@ -28,15 +39,85 @@ The dataset consists of *video games sales data* as of December 2016 scraped fro
 * `Year_of_Release`: The year that the game was released. It contains games released between the years 1985 and 2016.
 * `Global_Sales`: The number of game sales in millions.
 * `Critic_Score`: A score given by critics. A number between 0 and 100.
-* `User_Score`: A score given by users. A number between 0 and 10.
 
-In this analysis, we are interested in games released between the years 2000 - 2015. Also, we focused on the most popular platform in our analysis and filtered the less popular ones.
+In this analysis, we are interested in games released between the years 2000 - 2014. Also, we focused on the most popular platform in our analysis and filtered the less popular ones. 
+
+We filtered out games from the years 2015 and 2016 because at the time when the data was gathered, these games were less than two years old, therefore they might sell more copies and the sales numbers would not represent the actual number of sales.
+
+```{r}
+table <- read.csv(
+  file="Video_Games_Sales_as_at_22_Dec_2016.csv", 
+  header=TRUE, sep=",", fill=TRUE, stringsAsFactors=FALSE)
+```
+
+```{r}
+data <- filter(
+  table, 
+  Year_of_Release >= 2000 &
+  Year_of_Release <= 2014
+)
+data_scored = drop_na(
+  data, Year_of_Release, Platform, Global_Sales, Critic_Score)
+```
+
+This plot visualizes the total global sales per year.
+```{r}
+d1 = group_by(data, Year_of_Release) %>%
+  summarize(sales = sum(Global_Sales))
+s1 = group_by(data_scored, Year_of_Release) %>%
+  summarize(sales = sum(Global_Sales))
+ggplot() + 
+  geom_col(aes(x = Year_of_Release, y = sales), d1) +
+  geom_col(aes(x = Year_of_Release, y = sales), s1, fill = "red") +
+  labs(x = "Year of release", y = "Total global sales")
+```
+
+This plot visualizes the total global sales per platform.
+```{r}
+d2 = group_by(data, Platform) %>%
+  summarize(sales = sum(Global_Sales))
+s2 = group_by(data_scored, Platform) %>%
+  summarize(sales = sum(Global_Sales))
+ggplot() +
+  geom_col(aes(x = reorder(Platform, -sales), y = sales), d2) +
+  geom_col(aes(x = reorder(Platform, -sales), y = sales), s2, fill = "red") +
+  labs(x = "Platform", y = "Total global sales")
+```
+
+This plot visualizes the total number of games per platform.
+```{r}
+d3 = count(data, Platform)
+s3 = count(data_scored, Platform)
+ggplot() + 
+  geom_col(aes(x = reorder(Platform, -n), y = n), d3) +
+  geom_col(aes(x = reorder(Platform, -n), y = n), s3, fill = "red") +
+  labs(x = "Platform", y = "Total number of games") +
+  theme(legend.position = "right")
+```
+
+The data indicates that the critics have rated a large percentage of games by total sales, but a smaller percentage by the total number of games. Therefore, critics have not rated many unpopular games.
+
+This histogram visualizes counts of the critic scores.
+```{r}
+histogram(data_scored$Critic_Score, breaks = 30, xlab = "Critic score", type = c("count"))
+```
+
+As can be seen from the critic scores, there are far less scores below $50$ than above $50$.
 
 
-# The analysis Problem
+# The analysis problem
+Our analysis problem is the question of whether critic scores predict global sales of video games. The critic scores and the sales numbers are assumed to be independent, which means that we assume that the critics have scored the games without the knowledge of their sales. In reality, this assumption might not always be valid. Even if the critics score the game before the publisher has sold any copies, the knowledge about the game's predecessor or the publisher could bias the critic's score.
 
 
 # Description of the models
+We implemented two Stan models, non-hierarchical and hierarchical, to study the problem. In the non-hierarchical model, we pooled all games, and in the hierarchical model, we grouped them by their platform. We removed unpopular platforms, `N64`, `DC`, `GB`, `WS`, from this analysis.
+
+@bayesian_data_analysis_2013
+
+- prior
+- likelihood
+- posterior
+
 
 
 # References
