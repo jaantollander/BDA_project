@@ -95,7 +95,8 @@ The data indicates that the critics have rated a large percentage of games by to
 
 This histogram visualizes counts of the critic scores.
 ```{r}
-histogram(data_scored$Critic_Score, breaks = 30, xlab = "Critic score", type = c("count"))
+df <- data.frame(critic_score=data_scored$Critic_Score)
+ggplot(df, aes(x=critic_score)) + geom_histogram(binwidth=2) + xlab("critic scores")
 ```
 
 As can be seen from the critic scores, there are far less scores below $50$ than above $50$.
