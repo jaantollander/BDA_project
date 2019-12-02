@@ -48,7 +48,7 @@ Each model finds fits for both video game sales and critic scores.
 
 We give the scores an adjustable prior, because it has a scale that is common to each platform (Between 0 and 100).
 
-We choose an informative prior mean of 70 for the scores, because this is reasonably close to the sample mean for Critic_Score of `r mean(data$Critic_Score)`. We set the prior standard deviation to 0.15 to represent a slight amount of ignorance. We are saying that our prior guess for the critic score mean could be off by a factor of $\exp(0.2)=1.2$. (source: http://www.stat.columbia.edu/~gelman/research/unpublished/objectivityr3.pdf slide 13)
+We choose an informative prior mean of 70 for the scores, because this is reasonably close to the sample mean for Critic_Score of `r mean(data$Critic_Score)`. We set the prior standard deviation to 0.2 to represent a slight amount of ignorance. We are saying that our prior guess for the critic score mean could be off by a factor of $\exp(0.2)=1.2$. (source: http://www.stat.columbia.edu/~gelman/research/unpublished/objectivityr3.pdf slide 13)
 
 ### Model selection
 
@@ -244,16 +244,16 @@ compare_sales
 compare_scores
 ```
 
-We see that the separate model has the largest elpd by a large difference to the pooled and hierarchical models in regards to both of our variables, sales and scores. Thus the PSIS-LOO method strongly suggests that the separate model produces the most reliable results.
+We see that the separate model has the largest elpd by a large difference to the pooled and hierarchical models in regards to both of our variables, sales and scores. Thus the PSIS-LOO method strongly suggests that the separate model produces the most reliable results. This is probably because different gaming platforms are too different in terms of sales and scoring.
 
 ```{r}
 # maybe check pareto K here? 
 
-#pooled_k <- pooled_loo$diagnostics$pareto_k
-#separate_k <- separate_loo$diagnostics$pareto_k
-#hierarchical_k <- hierarchical_loo$diagnostics$pareto_k
-#df <- data.frame(x=pooled_k)
-#ggplot(df, aes(x=df$x)) + geom_histogram() + xlab("Pooled pareto k")
+pooled_k <- pooled_loo$diagnostics$pareto_k
+separate_k <- separate_loo$diagnostics$pareto_k
+hierarchical_k <- hierarchical_loo$diagnostics$pareto_k
+df <- data.frame(x=pooled_k)
+ggplot(df, aes(x=df$x)) + geom_histogram() + xlab("Pooled pareto k")
 ```
 
 ```{r}
