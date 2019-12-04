@@ -8,7 +8,7 @@ output:
   pdf_document: 
     latex_engine: xelatex
     toc: yes
-    toc_depth: 1
+    toc_depth: 2
 bibliography: bibliography.bib
 urlcolor: blue
 csl: https://raw.githubusercontent.com/citation-style-language/styles/master/harvard-anglia-ruskin-university.csl
@@ -18,9 +18,12 @@ csl: https://raw.githubusercontent.com/citation-style-language/styles/master/har
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
+# Libraries
 Import the required libraries and set Stan options.
 ```{r, message = FALSE}
 library(ggplot2)
+library(gridExtra)
 library(analogue)
 library(tidyr)
 library(plyr)
@@ -51,9 +54,10 @@ table <- read.csv(
 ```
 
 ```{r}
-data <- filter(table, Year_of_Release >= 2009, Platform != "GBA", Platform != "GC", Platform != "PS")
+data <- filter(
+  table, Year_of_Release >= 2009, Year_of_Release <= 2016)
 data_scored = drop_na(
-  data, Year_of_Release, Platform, Global_Sales, Critic_Score)
+  data, Year_of_Release, Platform, Global_Sales, Critic_Score, Rating)
 ```
 
 This plot visualizes the total global sales per year.
@@ -105,204 +109,106 @@ As can be seen from the critic scores, there are far less scores below $50$ than
 # The analysis problem
 Our analysis problem is the question of whether critic scores predict global sales of video games. The critic scores and the sales numbers are assumed to be independent, which means that we assume that the critics have scored the games without the knowledge of their sales. In reality, this assumption might not always be valid. Even if the critics score the game before the publisher has sold any copies, the knowledge about the game's predecessor or the publisher could bias the critic's score.
 
+
 # Description of the models
 We use three models in this report; a separate, pooled and a hierarchical model. In the separate model each platform is represented by a separate model with its own standard deviation $\sigma_j$. In the pooled model we treat all platforms as equal. The whole datasets shares a single mean $\mu$ and standard deviation $\sigma$. In the hierarchical model we formulate a model where each group represents a single video game platform. It uses a shared standard deviation $\sigma$ between all the platforms.
 
 Each model finds fits for both video game sales and critic scores. We removed unpopular platforms, `N64`, `DC`, `GB`, `WS`, from this analysis.
 
 ```{r}
-data_models <- summarise(drop_na(group_by(filter(table, Year_of_Release >= 2009, Platform != "GBA", Platform != "GC", Platform != "PS"), Platform, Name, Year_of_Release, Global_Sales, Critic_Score, Rating)))
+data_models = summarize(group_by(
+  data_scored, 
+  Platform, Name, Year_of_Release, Global_Sales, Critic_Score, Rating))
+```
+
+Assign integer labels for each platform. Required for the Stan models.
+```{r}
+platforms = unique(data_models$Platform)
+integer_labels = c()
+for (i in 1:length(platforms)) {
+  integer_labels[platforms[i]] <- i
+}
+group_indicators <- as.numeric(revalue(x=data_models$Platform, integer_labels))
+```
+
+```{r}
+integer_labels
 ```
 
 ## Stan model prior choices
-
 We give the scores an adjustable prior, because it has a scale that is common to each platform (Between 0 and 100).
 
 We choose an informative prior mean of 70 for the scores, because this is reasonably close to the sample mean for Critic_Score of `r mean(data_models$Critic_Score)` (also see histogram above). We set the prior standard deviation to 0.2 to represent a slight amount of ignorance. We are saying that our prior guess for the critic score mean could be off by a factor of $\exp(0.2)=1.2$. (source: http://www.stat.columbia.edu/~gelman/research/unpublished/objectivityr3.pdf slide 13)
 
-```{stan output.var="sales_separate"}
-data {
-  int<lower=0> N; // number of data points
-  int<lower=0> K; // number of groups
-  int<lower=1,upper=K> x[N]; // group indicator
-  vector[N] sales; // sales
-  vector[N] scores; // critic scores
-  real pmu_scores; // prior mean
-  real psigma_scores; // prior std
-}
-parameters {
-  vector[K] mu_sales;
-  vector[K] mu_scores;
-  real<lower=0> sigma_sales[K];
-  real<lower=0> sigma_scores[K];
-}
-model {
-  mu_scores ~ normal(pmu_scores, psigma_scores);
-  sales ~ normal(mu_sales[x], sigma_sales[x]);
-  scores ~ normal(mu_scores[x], sigma_scores[x]);
-}
-generated quantities {
-  vector[N] sales_log_lik;
-  vector[N] scores_log_lik;
-  for (i in 1:N) {
-    sales_log_lik[i] = normal_lpdf(sales[i] | mu_sales[x[i]], sigma_sales[x[i]]);
-  }
-  for (i in 1:N) {
-    scores_log_lik[i] = normal_lpdf(scores[i] | mu_scores[x[i]], sigma_scores[x[i]]);
-  }
-}
-```
-
-```{stan output.var="sales_pooled"}
-data {
-  int<lower=0> N; // number of data points
-  vector[N] sales; // sales
-  vector[N] scores; // critic scores
-  real pmu_scores; // prior mean
-  real psigma_scores; // prior std
-}
-parameters {
-  real mu_sales;
-  real mu_scores;
-  real<lower=0> sigma_sales;
-  real<lower=0> sigma_scores;
-}
-model {
-  mu_scores ~ normal(pmu_scores, psigma_scores);
-  sales ~ normal(mu_sales, sigma_sales);
-  scores ~ normal(mu_scores, sigma_scores);
-}
-generated quantities {
-  vector[N] sales_log_lik;
-  vector[N] scores_log_lik;
-  for (i in 1:N) {
-    sales_log_lik[i] = normal_lpdf(sales[i] | mu_sales, sigma_sales);
-  }
-  for (i in 1:N) {
-    scores_log_lik[i] = normal_lpdf(scores[i] | mu_scores, sigma_scores);
-  }
-}
-```
-
-```{stan output.var="sales_hierarchical"}
-data {
-  int<lower=0> N; // number of data points
-  int<lower=0> K; // number of groups
-  int<lower=1,upper=K> x[N]; // group indicator
-  vector[N] sales; // sales
-  vector[N] scores; // critic scores
-  real pmu_scores; // prior mean
-  real psigma_scores; // prior std
-}
-parameters {
-  vector[K] mu_sales;
-  vector[K] mu_scores;
-  real<lower=0> sigma_sales;
-  real<lower=0> sigma_scores;
-}
-model {
-  mu_scores ~ normal(pmu_scores, psigma_scores);
-  sales ~ normal(mu_sales[x], sigma_sales);
-  scores ~ normal(mu_scores[x], sigma_scores);
-}
-generated quantities {
-  vector[N] sales_log_lik;
-  vector[N] scores_log_lik;
-  for (i in 1:N) {
-    sales_log_lik[i] = normal_lpdf(sales[i] | mu_sales[x[i]], sigma_sales);
-  }
-  for (i in 1:N) {
-    scores_log_lik[i] = normal_lpdf(scores[i] | mu_scores[x[i]], sigma_scores);
-  }
-}
-```
 
 ## Model convergence
+We use the potential scale reduction factor $\hat{R}$ for our Stan model’s convergence analysis. We use the improved version proposed by @Vehtari2019.
 
-We use the potential scale reduction factor $\hat{R}$ for our Stan model’s convergence analysis. We use the improved version proposed by Aki Vehtari
-et al. (found at https://arxiv.org/abs/1903.08008).
-
+### Separate model
 ```{r}
-# Separate fit
-n_of_groups <- length(unique(data_models$Platform))
-n_of_rows <- nrow(data_models)
-data_points_sales <- data_models$Global_Sales
-data_points_scores <- data_models$Critic_Score
-
-# label each platform by integer for the Stan model
-integer_labels <- c("3DS"=1, "DS"=2, "PC"=3, "PS2"=4, "PS3"=5, "PS4"=6, "PSP"=7, "PSV"=8, "Wii"=9, "WiiU"=10, "X360"=11, "XB"=12, "XOne"=13)
-group_indicators <- as.numeric(revalue(x=data_models$Platform, integer_labels))
-
-data_group <- list(
-  K=n_of_groups,
-  sales=data_points_sales,
-  scores=data_points_scores,
-  N=n_of_rows,
+data_separate <- list(
+  K=length(unique(data_models$Platform)),
+  sales=data_models$Global_Sales,
+  scores=data_models$Critic_Score,
+  N=nrow(data_models),
   x=group_indicators,
   pmu_scores=70,
   psigma_scores=0.2
 )
 
-separate_fit <- rstan::sampling(sales_separate, data=data_group, iter=1000, chains=4, refresh=0)
+separate_fit <- rstan::stan(
+  file = "models/separate.stan", data=data_separate, 
+  iter=1000, chains=4, refresh=0)
 ```
 
+### Hierarchical model
 ```{r}
-# Hierarchical fit
-n_of_groups <- length(unique(data_models$Platform))
-n_of_rows <- nrow(data_models)
-data_points_sales <- data_models$Global_Sales
-data_points_scores <- data_models$Critic_Score
-
-# label each platform by integer for the Stan model
-integer_labels <- c("3DS"=1, "DS"=2, "PC"=3, "PS2"=4, "PS3"=5, "PS4"=6, "PSP"=7, "PSV"=8, "Wii"=9, "WiiU"=10, "X360"=11, "XB"=12, "XOne"=13)
-group_indicators <- as.numeric(revalue(x=data_models$Platform, integer_labels))
-
-data_group <- list(
-  K=n_of_groups,
-  sales=data_points_sales,
-  scores=data_points_scores,
-  N=n_of_rows,
+data_hierarchical <- list(
+  K=length(unique(data_models$Platform)),
+  sales=data_models$Global_Sales,
+  scores=data_models$Critic_Score,
+  N=nrow(data_models),
   x=group_indicators,
   pmu_scores=70,
   psigma_scores=0.2
 )
 
-hierarchical_fit <- rstan::sampling(sales_hierarchical, data=data_group, iter=1000, chains=4, refresh=0)
+hierarchical_fit <- rstan::stan(
+  file = "models/hierarchical.stan", data=data_hierarchical, 
+  iter=1000, chains=4, refresh=0)
 ```
 
+### Pooled model
 ```{r}
-# Pooled fit
-n_of_rows <- nrow(data_models)
-data_points_sales <- data_models$Global_Sales
-data_points_scores <- data_models$Critic_Score
-
-data_group <- list(
-  sales=data_points_sales,
-  scores=data_points_scores,
-  N=n_of_rows,
+data_pooled <- list(
+  sales=data_models$Global_Sales,
+  scores=data_models$Critic_Score,
+  N=nrow(data_models),
   pmu_scores=70,
   psigma_scores=0.2
 )
 
-pooled_fit <- rstan::sampling(sales_pooled, data=data_group, iter=1000, chains=4, refresh=0)
+pooled_fit <- rstan::stan(
+  file = "models/pooled.stan", data=data_pooled, 
+  iter=1000, chains=4, refresh=0)
+```
+
+### Convergence
+```{r}
+#print(separate_fit)
 ```
 
 ```{r}
-print(separate_fit)
+#print(hierarchical_fit)
 ```
 
 ```{r}
-print(hierarchical_fit)
-```
-
-```{r}
-print(pooled_fit)
+#print(pooled_fit)
 ```
 
 Each model's  $\hat{R}$ value is sufficiently close to 1. We can therefore assume that each model's chains have reached approximate convergence.
 
 ## Model selection
-
 We use the PSIS-LOO -method to asses the predictive performance of the pooled, separate and hierarchical
 Gaussian models in the video game sales dataset. Computations are performed on the R PSIS-LOO implementation, package "loo".
 
@@ -339,6 +245,7 @@ hierarchical_rel_n_eff_scores <- relative_eff(exp(hierarchical_log_lik_scores), 
 hierarchical_loo_scores <- loo(hierarchical_log_lik_scores, r_eff=hierarchical_rel_n_eff_scores)
 ```
 
+### Comparison
 ```{r}
 compare_sales <- loo_compare(x=list(pooled_loo_sales, separate_loo_sales, hierarchical_loo_sales))
 compare_scores <- loo_compare(x=list(pooled_loo_scores, separate_loo_scores, hierarchical_loo_scores))
@@ -349,30 +256,34 @@ compare_scores
 We see that the separate model has the largest elpd by a large difference to the pooled and hierarchical models in regards to both of our variables, sales and scores. Thus the PSIS-LOO method strongly suggests that the separate model produces the most reliable results. This is probably because different gaming platforms are too varying in terms of sales and scoring. We proceed with the separate model.
 
 ## Separate model posterior visualization
-
 We extract posterior draws of sales and scores for different platforms, compute the ratio of sales to scores and visualize the results.
 
 ```{r}
 mu_sales <- extract(separate_fit)$mu_sales
 mu_scores <- extract(separate_fit)$mu_scores / 100
 
-# c("3DS"=1, "DS"=2, "PC"=3, "PS2"=4, "PS3"=5, "PS4"=6, "PSP"=7, "PSV"=8, "Wii"=9, "WiiU"=10, "X360"=11, "XB"=12, "XOne"=13)
 plot_posterior_for_platform <- function(i, label) {
   ratio <- mu_sales[,i] / mu_scores[,i]
   df <- data.frame(ratio=ratio)
   ggplot(df, aes(x=as.numeric(rownames(df)), y=ratio)) + geom_line() + xlab(label)
 }
+```
 
-# plot posterior draw ratio for platform
-plot_posterior_for_platform(3, "PC")
-plot_posterior_for_platform(5, "PS3")
-plot_posterior_for_platform(9, "Wii")
-plot_posterior_for_platform(2, "DS")
+Plot posterior draw ratio for platform.
+```{r}
+p1 <- plot_posterior_for_platform(integer_labels["PC"], "PC")
+p2 <- plot_posterior_for_platform(integer_labels["PS3"], "PS3")
+p3 <- plot_posterior_for_platform(integer_labels["Wii"], "Wii")
+p4 <- plot_posterior_for_platform(integer_labels["DS"], "DS")
+grid.arrange(p1, p2, p3, p4, ncol = 2)
+```
 
-# plot variances for all platforms
-variances <- rep(NULL, 13)
-platforms <- c("3DS", "DS", "PC", "PS2", "PS3", "PS4", "PSP", "PSV", "Wii", "WiiU", "X360", "XB", "XOne")
-for (i in 1:13) {
+Plot variances for all platforms.
+```{r}
+platforms <- unique(data_models$Platform)
+n = length(platforms)
+variances <- rep(NULL, n)
+for (i in 1:n) {
 ratios <- mu_sales[,i] / mu_scores[,i]
   variances[i] <- var(ratios)
 }
@@ -383,29 +294,20 @@ ggplot(df, aes(x=platforms, y=variances)) + geom_col()
 We find that different platforms have more variance when it comes to the relationship between sales and scores given by critics. It is the platforms developed by Nintendo in particular that have more variance; this could indicate that the consumers for these platforms care less about critic opinions. This could be due to their age, as platforms like Wii and DS have a lot more games made for people of all ages in comparison to a platform like PS3. This is demonstrated in the histograms below.
 
 ```{r}
-# wii ratings
 wii_ratings <- filter(table, Year_of_Release >= 2009, Platform == "Wii")
 df.wii <- data.frame(age_rating=wii_ratings$Rating)
-ggplot(df.wii, aes(x=age_rating)) + geom_bar() + xlab("Wii")
+q1 <- ggplot(df.wii, aes(x=age_rating)) + geom_bar() + xlab("Wii")
 
-# DS ratings
-# ps3 ratings
 ds_ratings <- filter(table, Year_of_Release >= 2009, Platform == "DS")
 df.ds <- data.frame(age_rating=ds_ratings$Rating)
-ggplot(df.ds, aes(x=age_rating)) + geom_bar() + xlab("DS")
+q2 <- ggplot(df.ds, aes(x=age_rating)) + geom_bar() + xlab("DS")
 
-# ps3 ratings
 ps3_ratings <- filter(table, Year_of_Release >= 2009, Platform == "PS3")
 df.ps3 <- data.frame(age_rating=ps3_ratings$Rating)
-ggplot(df.ps3, aes(x=age_rating)) + geom_bar() + xlab("PS3")
+q3 <- ggplot(df.ps3, aes(x=age_rating)) + geom_bar() + xlab("PS3")
+
+grid.arrange(q1, q2, q3, ncol = 1)
 ```
-
-@bayesian_data_analysis_2013
-
-- prior
-- likelihood
-- posterior
-
 
 
 # References
