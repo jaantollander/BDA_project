@@ -60,7 +60,7 @@ The dataset consists of *video games sales data* as of December 2016 scraped fro
 
 In this analysis, we are interested in games released between the years 2009 - 2016. Also, we focused on the most popular platform in our analysis and filtered the less popular ones. 
 
-## Global sales, Release years and platforms
+## Global sales, release years and platforms
 ```{r, echo = FALSE}
 # This plot visualizes the total global sales per year.
 d1 <- group_by(data, Year_of_Release) %>%
@@ -102,7 +102,7 @@ grid.arrange(g2, g3, ncol = 1)
 
 The data indicates that the critics have rated a large percentage of games by total sales, but a smaller percentage by the total number of games. Therefore, critics have not rated many unpopular games.
 
-## Critic Scores
+## Critic scores
 This histogram visualizes counts of the critic scores.
 ```{r}
 df <- data.frame(critic_score=data_scored$Critic_Score)
@@ -111,7 +111,7 @@ ggplot(df, aes(x=critic_score)) + geom_histogram(binwidth=2) + xlab("critic scor
 
 As can be seen from the critic scores, there are far less scores below $50$ than above $50$.
 
-## Rating
+## Ratings
 This histogram visualizes the game age ratings in the dataset.
 ```{r, echo=FALSE}
 d4 <- count(data, Rating)
@@ -228,9 +228,9 @@ pooled_fit <- rstan::stan(
   iter=1000, chains=4, refresh=0)
 ```
 
-### Convergence
+### Convergence analysis
 ```{r}
-#print(separate_fit)
+#print(separate_fit, pars = c("mu_sales", "mu_scores"))
 ```
 
 ```{r}
@@ -250,40 +250,64 @@ Gaussian models in the video game sales dataset. Computations are performed on t
 ### Separate LOO
 
 ```{r, warning=FALSE}
-separate_log_lik_sales <- extract_log_lik(separate_fit, parameter_name="sales_log_lik")
-separate_rel_n_eff_sales <- relative_eff(exp(separate_log_lik_sales), chain_id=rep(1:4, each=500))
-separate_loo_sales <- loo(separate_log_lik_sales, r_eff=separate_rel_n_eff_sales)
-separate_log_lik_scores <- extract_log_lik(separate_fit, parameter_name="scores_log_lik")
-separate_rel_n_eff_scores <- relative_eff(exp(separate_log_lik_scores), chain_id=rep(1:4, each=500))
-separate_loo_scores <- loo(separate_log_lik_scores, r_eff=separate_rel_n_eff_scores)
+separate_log_lik_sales <- extract_log_lik(
+  separate_fit, parameter_name="sales_log_lik")
+separate_rel_n_eff_sales <- relative_eff(
+  exp(separate_log_lik_sales), chain_id=rep(1:4, each=500))
+separate_loo_sales <- loo(
+  separate_log_lik_sales, r_eff=separate_rel_n_eff_sales)
+separate_log_lik_scores <- extract_log_lik(
+  separate_fit, parameter_name="scores_log_lik")
+separate_rel_n_eff_scores <- relative_eff(
+  exp(separate_log_lik_scores), chain_id=rep(1:4, each=500))
+separate_loo_scores <- loo(
+  separate_log_lik_scores, r_eff=separate_rel_n_eff_scores)
 ```
 
 ### Pooled LOO
 
 ```{r, warning=FALSE}
-pooled_log_lik_sales <- extract_log_lik(pooled_fit, parameter_name="sales_log_lik")
-pooled_rel_n_eff_sales <- relative_eff(exp(pooled_log_lik_sales), chain_id=rep(1:4, each=500))
-pooled_loo_sales <- loo(pooled_log_lik_sales, r_eff=pooled_rel_n_eff_sales)
-pooled_log_lik_scores <- extract_log_lik(pooled_fit, parameter_name="scores_log_lik")
-pooled_rel_n_eff_scores <- relative_eff(exp(pooled_log_lik_scores), chain_id=rep(1:4, each=500))
-pooled_loo_scores <- loo(pooled_log_lik_scores, r_eff=pooled_rel_n_eff_scores)
+pooled_log_lik_sales <- extract_log_lik(
+  pooled_fit, parameter_name="sales_log_lik")
+pooled_rel_n_eff_sales <- relative_eff(
+  exp(pooled_log_lik_sales), chain_id=rep(1:4, each=500))
+pooled_loo_sales <- loo(
+  pooled_log_lik_sales, r_eff=pooled_rel_n_eff_sales)
+pooled_log_lik_scores <- extract_log_lik(
+  pooled_fit, parameter_name="scores_log_lik")
+pooled_rel_n_eff_scores <- relative_eff(
+  exp(pooled_log_lik_scores), chain_id=rep(1:4, each=500))
+pooled_loo_scores <- loo(
+  pooled_log_lik_scores, r_eff=pooled_rel_n_eff_scores)
 ```
 
 ### Hierarchical LOO
 
 ```{r, warning=FALSE}
-hierarchical_log_lik_sales <- extract_log_lik(hierarchical_fit, parameter_name="sales_log_lik")
-hierarchical_rel_n_eff_sales <- relative_eff(exp(hierarchical_log_lik_sales), chain_id=rep(1:4, each=500))
-hierarchical_loo_sales <- loo(hierarchical_log_lik_sales, r_eff=hierarchical_rel_n_eff_sales)
-hierarchical_log_lik_scores <- extract_log_lik(hierarchical_fit, parameter_name="scores_log_lik")
-hierarchical_rel_n_eff_scores <- relative_eff(exp(hierarchical_log_lik_scores), chain_id=rep(1:4, each=500))
-hierarchical_loo_scores <- loo(hierarchical_log_lik_scores, r_eff=hierarchical_rel_n_eff_scores)
+hierarchical_log_lik_sales <- extract_log_lik(
+  hierarchical_fit, parameter_name="sales_log_lik")
+hierarchical_rel_n_eff_sales <- relative_eff(
+  exp(hierarchical_log_lik_sales), chain_id=rep(1:4, each=500))
+hierarchical_loo_sales <- loo(
+  hierarchical_log_lik_sales, r_eff=hierarchical_rel_n_eff_sales)
+hierarchical_log_lik_scores <- extract_log_lik(
+  hierarchical_fit, parameter_name="scores_log_lik")
+hierarchical_rel_n_eff_scores <- relative_eff(
+  exp(hierarchical_log_lik_scores), chain_id=rep(1:4, each=500))
+hierarchical_loo_scores <- loo(
+  hierarchical_log_lik_scores, r_eff=hierarchical_rel_n_eff_scores)
 ```
 
 ### Comparison
 ```{r}
-compare_sales <- loo_compare(x=list(pooled_loo_sales, separate_loo_sales, hierarchical_loo_sales))
-compare_scores <- loo_compare(x=list(pooled_loo_scores, separate_loo_scores, hierarchical_loo_scores))
+compare_sales <- loo_compare(
+  x=list("Pooled" = pooled_loo_sales, 
+         "Separate" = separate_loo_sales, 
+         "Hierarchical" = hierarchical_loo_sales))
+compare_scores <- loo_compare(
+  x=list("Pooled" = pooled_loo_scores, 
+         "Separate" = separate_loo_scores, 
+         "Hierarchical" = hierarchical_loo_scores))
 compare_sales
 compare_scores
 ```
@@ -293,7 +317,7 @@ We see that the separate model has the largest elpd by a large difference to the
 ## Separate model posterior visualization
 We extract posterior draws of sales and scores for different platforms, compute the ratio of sales to scores and visualize the results.
 
-```{r}
+```{r, echo = FALSE}
 mu_sales <- extract(separate_fit)$mu_sales
 mu_scores <- extract(separate_fit)$mu_scores / 100
 
@@ -317,8 +341,7 @@ grid.arrange(p1, p2, p3, p4, ncol = 2)
 ```
 
 Plot variances for all platforms.
-```{r}
-platforms <- unique(data_models$Platform)
+```{r, echo = FALSE}
 n = length(platforms)
 variances <- rep(NULL, n)
 for (i in 1:n) {
@@ -326,7 +349,11 @@ ratios <- mu_sales[,i] / mu_scores[,i]
   variances[i] <- var(ratios)
 }
 df <- data.frame(platforms=platforms, variances=variances)
-ggplot(df, aes(x=platforms, y=variances)) + geom_col()
+p5 <- ggplot(df, aes(x=platforms, y=variances)) + geom_col()
+```
+
+```{r}
+p5
 ```
 
 We find that different platforms have more variance when it comes to the relationship between sales and scores given by critics. It is the platforms developed by Nintendo in particular that have more variance; this could indicate that the consumers for these platforms care less about critic opinions. This could be due to their age, as platforms like Wii and DS have a lot more games made for people of all ages in comparison to a platform like PS3. This is demonstrated in the histograms below.
