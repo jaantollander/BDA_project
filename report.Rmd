@@ -46,7 +46,8 @@ table <- read.csv(
 data <- filter(
   table, Year_of_Release >= 2009, Year_of_Release <= 2016)
 data_scored <- drop_na(
-  data, Year_of_Release, Platform, Global_Sales, Critic_Score, Rating)
+  data, Year_of_Release, Platform, Global_Sales, Critic_Score, Rating) %>%
+  filter(Rating != "")
 ```
 
 ## Description
@@ -100,7 +101,7 @@ g1
 grid.arrange(g2, g3, ncol = 1)
 ```
 
-The data indicates that the critics have rated a large percentage of games by total sales, but a smaller percentage by the total number of games. Therefore, critics have not rated many unpopular games.
+In both of these plot, the gray color indicates all games and the red color indicates games that are scored by a critic. The data indicates that the critics have rated a large percentage of games by total sales, but a smaller percentage by the total number of games. Therefore, critics have not rated many unpopular games.
 
 ## Critic scores
 This histogram visualizes counts of the critic scores.
@@ -110,6 +111,7 @@ ggplot(df, aes(x=critic_score)) + geom_histogram(binwidth=2) + xlab("critic scor
 ```
 
 As can be seen from the critic scores, there are far less scores below $50$ than above $50$.
+
 
 ## Ratings
 This histogram visualizes the game age ratings in the dataset.
@@ -144,9 +146,7 @@ Our analysis problem is the question of whether critic scores predict global sal
 
 
 # Description of the models
-We use three models in this report; a separate, pooled and a hierarchical model. In the separate model each platform is represented by a separate model with its own standard deviation $\sigma_j$. In the pooled model we treat all platforms as equal. The whole datasets shares a single mean $\mu$ and standard deviation $\sigma$. In the hierarchical model we formulate a model where each group represents a single video game platform. It uses a shared standard deviation $\sigma$ between all the platforms.
-
-Each model finds fits for both video game sales and critic scores. We removed unpopular platforms, `N64`, `DC`, `GB`, `WS`, from this analysis.
+We use three models in this report; a separate model, a pooled model, and a hierarchical model. In the separate model, we represent each platform by a separate model with a standard deviation of $\sigma_j$. In the pooled model, we treat all platforms as equal -- the whole dataset shares a single mean $\mu$ and standard deviation $\sigma$. In the hierarchical model, we formulate a model where each group represents a single video game platform and uses a shared standard deviation $\sigma$ between all the platforms. Each model finds fits for both video game sales and critic scores. We have removed unpopular platforms, `N64`, `DC`, `GB`, `WS`, from this analysis.
 
 ```{r}
 data_models = filter(
@@ -171,16 +171,13 @@ integer_labels
 ```
 
 ## Stan model prior choices
-We give the scores an adjustable prior, because it has a scale that is common to each platform (Between 0 and 100).
-
-We choose an informative prior mean of 70 for the scores, because this is reasonably close to the sample mean for Critic_Score of `r mean(data_models$Critic_Score)` (also see histogram above). We set the prior standard deviation to 0.2 to represent a slight amount of ignorance. We are saying that our prior guess for the critic score mean could be off by a factor of $\exp(0.2)=1.2$. [@Gelman2016]
-
+We give the scores an adjustable prior because it has a scale that is common to each platform, that is, a value between 0 and 100. We chose an informative prior mean of $70$ for the scores, which is reasonably close to the sample mean for Critic_Score of `r mean(data_models$Critic_Score)`, which we can see in the histogram above. We set the prior standard deviation to $0.2$ to represent a slight amount of ignorance. We are saying that our prior guess for the critic score mean could be off by a factor of $\exp(0.2)=1.2$. [@Gelman2016]
 
 ## Model convergence
 We use the potential scale reduction factor $\hat{R}$ for our Stan model’s convergence analysis. We use the improved version proposed by @Vehtari2019.
 
 ### Separate model
-```{r}
+```{r, warning=FALSE}
 data_separate <- list(
   K=length(unique(data_models$Platform)),
   sales=data_models$Global_Sales,
@@ -197,7 +194,7 @@ separate_fit <- rstan::stan(
 ```
 
 ### Hierarchical model
-```{r}
+```{r, warning=FALSE}
 data_hierarchical <- list(
   K=length(unique(data_models$Platform)),
   sales=data_models$Global_Sales,
@@ -214,7 +211,7 @@ hierarchical_fit <- rstan::stan(
 ```
 
 ### Pooled model
-```{r}
+```{r, warning=FALSE}
 data_pooled <- list(
   sales=data_models$Global_Sales,
   scores=data_models$Critic_Score,
@@ -244,8 +241,7 @@ pooled_fit <- rstan::stan(
 Each model's  $\hat{R}$ value is sufficiently close to 1. We can therefore assume that each model's chains have reached approximate convergence.
 
 ## Model selection
-We use the PSIS-LOO -method to asses the predictive performance of the pooled, separate and hierarchical
-Gaussian models in the video game sales dataset. Computations are performed on the R PSIS-LOO implementation, package "loo".
+We use the PSIS-LOO -method to asses the predictive performance of the pooled, separate and hierarchical Gaussian models in the video game sales dataset. Computations are performed on the R PSIS-LOO implementation, package `loo`.
 
 ### Separate LOO
 
@@ -312,30 +308,39 @@ compare_sales
 compare_scores
 ```
 
-We see that the separate model has the largest elpd by a large difference to the pooled and hierarchical models in regards to both of our variables, sales and scores. Thus the PSIS-LOO method strongly suggests that the separate model produces the most reliable results. This is probably because different gaming platforms are too varying in terms of sales and scoring. We proceed with the separate model.
+We see that the separate model has the largest `elpd` by a significant difference to the pooled and hierarchical models in regards to both of our variables, sales, and scores. Thus the PSIS-LOO method strongly suggests that the separate model produces the most reliable results. Unreliable results for pooled and hierarchical models are likely caused by too much variance between different gaming platforms in terms of sales and scoring. Next, we will continue by analyzing the separate model.
+
 
 ## Separate model posterior visualization
-We extract posterior draws of sales and scores for different platforms, compute the ratio of sales to scores and visualize the results.
+We extract posterior draws of sales and scores for different platforms, compute the ratio of sales to scores and visualize the results. The ratio is defined as
+$$
+r = \frac{\mu_{sales}}{\hat{\mu}_{score}}.
+$$
+where $\hat{\mu}=\mu_{score}/100$ is the normalized score.
 
 ```{r, echo = FALSE}
-mu_sales <- extract(separate_fit)$mu_sales
-mu_scores <- extract(separate_fit)$mu_scores / 100
+separate_values <- extract(separate_fit)
+mu_sales <- separate_values$mu_sales
+mu_scores <- separate_values$mu_scores / 100
 
-plot_posterior_for_platform <- function(i, label) {
+plot_posterior_for_platform <- function(label) {
+  i <- integer_labels[label]
   ratio <- mu_sales[,i] / mu_scores[,i]
   df <- data.frame(ratio=ratio)
-  ggplot(df, aes(x=as.numeric(rownames(df)), y=ratio)) + geom_line() + xlab(label)
+  ggplot(df, aes(x=as.numeric(rownames(df)), y=ratio)) + 
+    geom_line() + 
+    xlab(label)
 }
 ```
 
-Plot posterior draw ratio for platform.
 ```{r, echo = FALSE}
-p1 <- plot_posterior_for_platform(integer_labels["PC"], "PC")
-p2 <- plot_posterior_for_platform(integer_labels["PS3"], "PS3")
-p3 <- plot_posterior_for_platform(integer_labels["Wii"], "Wii")
-p4 <- plot_posterior_for_platform(integer_labels["DS"], "DS")
+p1 <- plot_posterior_for_platform("PC")
+p2 <- plot_posterior_for_platform("PS3")
+p3 <- plot_posterior_for_platform("Wii")
+p4 <- plot_posterior_for_platform("DS")
 ```
 
+Plot posterior draw ratio for platform.
 ```{r}
 grid.arrange(p1, p2, p3, p4, ncol = 2)
 ```
@@ -345,7 +350,7 @@ Plot variances for all platforms.
 n = length(platforms)
 variances <- rep(NULL, n)
 for (i in 1:n) {
-ratios <- mu_sales[,i] / mu_scores[,i]
+  ratios <- mu_sales[,i] / mu_scores[,i]
   variances[i] <- var(ratios)
 }
 df <- data.frame(platforms=platforms, variances=variances)
@@ -356,20 +361,24 @@ p5 <- ggplot(df, aes(x=platforms, y=variances)) + geom_col()
 p5
 ```
 
-We find that different platforms have more variance when it comes to the relationship between sales and scores given by critics. It is the platforms developed by Nintendo in particular that have more variance; this could indicate that the consumers for these platforms care less about critic opinions. This could be due to their age, as platforms like Wii and DS have a lot more games made for people of all ages in comparison to a platform like PS3. This is demonstrated in the histograms below.
+We can see that different platforms have more variance when it comes to the relationship between sales and critic scores. In particular, the platforms developed by Nintendo have more variance, which could indicate that the consumers for these platforms care less about critic opinions. This finding could be explained due to their age ratings since platforms like Wii and DS have a lot more games made for people of all ages in comparison to a platform like PS3, which we demonstrate in the histograms below.
 
-```{r, echo = FALSE}
-wii_ratings <- filter(table, Year_of_Release >= 2009, Platform == "Wii")
-df.wii <- data.frame(age_rating=wii_ratings$Rating)
-q1 <- ggplot(df.wii, aes(x=age_rating)) + geom_bar() + xlab("Wii")
+```{r, echo=FALSE}
+# Ratings in increasing order
+#ratings = c("E", "E10+", "T", "M")
 
-ds_ratings <- filter(table, Year_of_Release >= 2009, Platform == "DS")
-df.ds <- data.frame(age_rating=ds_ratings$Rating)
-q2 <- ggplot(df.ds, aes(x=age_rating)) + geom_bar() + xlab("DS")
+plot_rating <- function(platform) {
+  df <- filter(data_scored, Platform == platform)
+  ggplot() + 
+    geom_bar(aes(x=Rating), data = df) +
+    xlab(platform)  
+}
+```
 
-ps3_ratings <- filter(table, Year_of_Release >= 2009, Platform == "PS3")
-df.ps3 <- data.frame(age_rating=ps3_ratings$Rating)
-q3 <- ggplot(df.ps3, aes(x=age_rating)) + geom_bar() + xlab("PS3")
+```{r, echo=FALSE}
+q1 = plot_rating("Wii")
+q2 = plot_rating("DS")
+q3 = plot_rating("PS3")
 ```
 
 ```{r}
