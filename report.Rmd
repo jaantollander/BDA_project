@@ -144,7 +144,7 @@ integer_labels
 ## Stan model prior choices
 We give the scores an adjustable prior, because it has a scale that is common to each platform (Between 0 and 100).
 
-We choose an informative prior mean of 70 for the scores, because this is reasonably close to the sample mean for Critic_Score of `r mean(data_models$Critic_Score)` (also see histogram above). We set the prior standard deviation to 0.2 to represent a slight amount of ignorance. We are saying that our prior guess for the critic score mean could be off by a factor of $\exp(0.2)=1.2$. (source: http://www.stat.columbia.edu/~gelman/research/unpublished/objectivityr3.pdf slide 13)
+We choose an informative prior mean of 70 for the scores, because this is reasonably close to the sample mean for Critic_Score of `r mean(data_models$Critic_Score)` (also see histogram above). We set the prior standard deviation to 0.2 to represent a slight amount of ignorance. We are saying that our prior guess for the critic score mean could be off by a factor of $\exp(0.2)=1.2$. [@Gelman2016]
 
 
 ## Model convergence
