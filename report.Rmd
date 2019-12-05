@@ -116,11 +116,10 @@ As can be seen from the critic scores, there are far less scores below $50$ than
 ## Ratings
 This histogram visualizes the game age ratings in the dataset.
 ```{r, echo=FALSE}
-d4 <- count(data, Rating)
-s4 <- count(data_scored, Rating)
+ratings = c("", "E", "EC", "E10+", "T", "M", "RP")
 g4 <- ggplot() + 
-  geom_col(aes(x = reorder(Rating, -n), y = n), d4) +
-  geom_col(aes(x = reorder(Rating, -n), y = n), s4, fill = "red") +
+  geom_bar(aes(x = factor(Rating, ratings)), data = data) +
+  geom_bar(aes(x = factor(Rating, ratings)), data = data_scored, fill = "red") +
   labs(x = "Rating", y = "Total number of games") +
   theme(legend.position = "right")
 ```
@@ -138,7 +137,8 @@ We can interpret the game age rating as follows. [@ESRBRatings]
 * `M` -- Mature, ages 17 and up
 * `AO` -- Adults only
 * `RP` -- Rating pending, rating has not yet been assigned
-* There are also games with no rating.
+
+There are also games with no rating.
 
 
 # Analysis problem
@@ -365,12 +365,12 @@ We can see that different platforms have more variance when it comes to the rela
 
 ```{r, echo=FALSE}
 # Ratings in increasing order
-#ratings = c("E", "E10+", "T", "M")
+ratings = c("E", "E10+", "T", "M")
 
 plot_rating <- function(platform) {
   df <- filter(data_scored, Platform == platform)
   ggplot() + 
-    geom_bar(aes(x=Rating), data = df) +
+    geom_bar(aes(x=factor(Rating, ratings)), data = df) +
     xlab(platform)  
 }
 ```
