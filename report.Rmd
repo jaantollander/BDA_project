@@ -34,9 +34,11 @@ options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 ```
 
-[GitHub repository](https://github.com/jaantollander/BDA_project)
+This project is available in the [`BDA_project`](https://github.com/jaantollander/BDA_project) GitHub repository.
+
 
 # Dataset
+Load the dataset and filter unnecessary values.
 ```{r}
 table <- read.csv(
   file="data/Video_Games_Sales_as_at_22_Dec_2016.csv", 
@@ -108,6 +110,33 @@ ggplot(df, aes(x=critic_score)) + geom_histogram(binwidth=2) + xlab("critic scor
 ```
 
 As can be seen from the critic scores, there are far less scores below $50$ than above $50$.
+
+## Rating
+This histogram visualizes the game age ratings in the dataset.
+```{r, echo=FALSE}
+d4 <- count(data, Rating)
+s4 <- count(data_scored, Rating)
+g4 <- ggplot() + 
+  geom_col(aes(x = reorder(Rating, -n), y = n), d4) +
+  geom_col(aes(x = reorder(Rating, -n), y = n), s4, fill = "red") +
+  labs(x = "Rating", y = "Total number of games") +
+  theme(legend.position = "right")
+```
+
+```{r}
+g4
+```
+
+We can interpret the game age rating as follows. [@ESRBRatings]
+
+* `E` -- Everyone, all ages
+* `EC` -- Early childhood, ages 3 and up
+* `E10+` -- Everyone 10 and older
+* `T` -- Teen, ages 13 and up
+* `M` -- Mature, ages 17 and up
+* `AO` -- Adults only
+* `RP` -- Rating pending, rating has not yet been assigned
+* There are also games with no rating.
 
 
 # Analysis problem
