@@ -2,6 +2,7 @@
 *.pdf
 *.rds
 *.html
+*.DS_Store
 
 ## R
 # History files
