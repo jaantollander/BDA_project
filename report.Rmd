@@ -12,6 +12,7 @@ output:
 bibliography: bibliography.bib
 urlcolor: blue
 csl: https://raw.githubusercontent.com/citation-style-language/styles/master/harvard-anglia-ruskin-university.csl
+link-citations: true
 ---
 
 ```{r setup, include=FALSE}
