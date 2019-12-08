@@ -311,7 +311,7 @@ We extract posterior draws of sales and scores for different platforms, and then
 $$
 r = \frac{\mu_{sales}}{\hat{\mu}_{score}},
 $$
-where $\hat{\mu}=\mu_{score}/100$ is the normalized score.  We can interpret the ratio such that when the ratio is lower than the mean of ratios, the critics have overvalued the game, and when it is higher than the mean, the critics have undervalued the game.  A lower variance of ratios indicates that critic scores are better at predicting sales, and higher variance indicates that they are worse at predicting sales.
+where $\hat{\mu}=\mu_{score}/100$ is the normalized score.  We can interpret the ratio $r$ such that when $r$ is lower than the mean of ratios, the critics have overvalued the game, and when it is higher than the mean, the critics have undervalued the game.  A lower variance of ratios indicates that critic scores are better at predicting sales, and higher variance indicates that they are worse at predicting sales.
 
 ```{r, echo = FALSE}
 separate_values <- extract(separate_fit)
@@ -335,7 +335,7 @@ p3 <- plot_posterior_for_platform("Wii")
 p4 <- plot_posterior_for_platform("3DS")
 ```
 
-Plot posterior draw ratio for platform.
+Plot posterior draw ratio $r$ for platform.
 ```{r}
 grid.arrange(p1, p2, p3, p4, ncol = 2)
 ```
@@ -343,15 +343,20 @@ grid.arrange(p1, p2, p3, p4, ncol = 2)
 Plot means and variances for all platforms.
 ```{r, echo = FALSE}
 n = length(platforms)
-means <- rep(NULL, n)
-variances <- rep(NULL, n)
+means_all <- rep(NULL, n)
+variances_all <- rep(NULL, n)
 for (i in 1:n) {
   ratios <- mu_sales[,i] / mu_scores[,i]
-  variances[i] <- var(ratios)
-  means[i] <- mean(ratios)
+  variances_all[i] <- var(ratios)
+  means_all[i] <- mean(ratios)
 }
-df <- data.frame(platforms=platforms, variances=variances, means = means)
-p5 <- ggplot(df, aes(x=platforms, y=means)) + geom_col()
+
+df <- data.frame(platforms=platforms, variances=variances_all, means = means_all)
+df.mean_mean = df %>% 
+  group_by(platforms) %>% 
+  mutate(ymean = mean(means_all))
+p5 <- ggplot(df, aes(x=platforms, y=means)) + geom_col() + 
+  geom_errorbar(data=df.mean_mean, aes(platforms, ymax = ymean, ymin = ymean, colour="pooled sample mean"), size=0.5, linetype = "longdash", inherit.aes = F, width = 1)
 p6 <- ggplot(df, aes(x=platforms, y=variances)) + geom_col()
 ```
 
@@ -360,6 +365,8 @@ grid.arrange(p5, p6, nrow = 2)
 ```
 
 We can see that different platforms have more variance when it comes to the relationship between sales and critic scores. In particular, the platforms developed by Nintendo (3DS, DS, Wii, WiiU) have more variance, which could indicate that the consumers for these platforms care less about critic opinions. This finding could be explained due to their age ratings since platforms like Wii and DS have a lot more games made for people of all ages in comparison to a platform like the PS3, which we demonstrate in the histograms below.
+
+The sample mean line visualizes how, for certain platforms, critics on average undervalue games (PS3, PS4, Wii, X360) and for others, overvalue games. In other words, for the former platforms, there are more sales despite lower scores on average. The latter (DS, PC, PS2, PSP, PSV) earn higher scores in spite of lower sales. It is important to note that this does not take the amount of console owners into account. One could normalize the sales by the amount of owners for each platform (video game console), but our dataset does not offer this information.
 
 ```{r, echo=FALSE}
 # Ratings in increasing order
@@ -436,24 +443,24 @@ grid.arrange(scores_preds_plot, scores_observed_plot)
 
 The posterior predictive distribution follows the observed data very well for both sales and scores.
 
-We compare the fitted posterior distribution to the observed data in the dataset.
+We compare the fitted posterior distribution to the observed data in the dataset via the ratio $r$ mean.
 
 ```{r}
 observed_data <- filter(
   data_scored, 
   Platform != "N64", Platform != "DC", Platform != "GB", Platform != "WS") %>%
   group_by(Platform) %>%
-  dplyr::summarize(Ratio_Variance=var(Global_Sales / (Critic_Score / 10)))
+  dplyr::summarize(Ratio_Mean=mean(Global_Sales / (Critic_Score / 100)))
 ```
 
 ```{r}
 n <- length(platforms)
-variances_observed <- rep(NULL, n)
+means_observed <- rep(NULL, n)
 for (i in 1:n) {
-  variances_observed[i] <- observed_data[i,2]
+  means_observed[i] <- observed_data[i,2]
 }
-df_observed <- data.frame(platforms=platforms, variances_observed=variances_observed)
-p5_observed <- ggplot(df_observed, aes(x=platforms, y=variances_observed)) + geom_col()
+df_observed <- data.frame(platforms=platforms, means_observed=means_observed)
+p5_observed <- ggplot(df_observed, aes(x=platforms, y=means_observed)) + geom_col()
 ```
 
 ```{r}
@@ -463,24 +470,24 @@ grid.arrange(
   ncol = 1)
 ```
 
-The fitted variance for the sales to critic scores ratio follows the dataset variance for the most part. The platforms `Wii` and `X360` are the biggest differences. This can be visualized by dropping them from the barplots:
+The fitted variance for the sales to critic scores ratio $r$ follows the dataset variance for the most part. The platforms `Wii` and `X360` are the biggest differences. This can be visualized by dropping them from the barplots:
 
 ```{r}
-variances_observed_drop <- variances_observed[-9][-10]
-variances_fitted_drop <- variances[-9][-10]
+means_observed_drop <- means_observed[-9][-10]
+means_fitted_drop <- means[-9][-10]
 df_observed_drop <- data.frame(
   platforms=platforms[-9][-10],
-  variances_observed_drop=variances_observed_drop)
+  means_observed_drop=means_observed_drop)
 p5_observed_drop <- ggplot(
   df_observed_drop, 
-  aes(x=platforms, y=variances_observed_drop)) + geom_col()
+  aes(x=platforms, y=means_observed_drop)) + geom_col()
 
 df_fitted_drop <- data.frame(
   platforms=platforms[-9][-10], 
-  variances_fitted_drop=variances_fitted_drop)
+  means_fitted_drop=means_fitted_drop)
 p5_fitted_drop <- ggplot(
   df_fitted_drop, 
-  aes(x=platforms, y=variances_fitted_drop)) + geom_col()
+  aes(x=platforms, y=means_fitted_drop)) + geom_col()
 grid.arrange(
   p5_fitted_drop + xlab("Fitted"), 
   p5_observed_drop + xlab("Dataset"), 
@@ -561,5 +568,9 @@ grid.arrange(p5_chosen, p5_unif, p5_alt, ncol = 1)
 ```
 
 Changing the prior for the scores seems to have little effect. Therefore we can say that the prior is not very sensitive to changes and that the data converges to a similar posterior distribution regardless of our choices.
+
+## Discussion of problems and potential improvements
+
+As proven in the previous sections, the model performs very well according to convergence analytics and posterior predictive checking. The model, as it is, currently has one major problem: it does not take the amount of console owners for each platform into account. It assumes each platform to be identical in terms of potential sales. With the knowledge of each platform's consumerbase's size we could likely make the hierarchical model more viable by normalizing the sales-distributions, as they were the separating difference between each platform and led us to use the separate model. Most importantly, this would make the ratio $r$ a more reliable measure of critic overrating particular games.
 
 # References
