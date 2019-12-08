@@ -111,7 +111,8 @@ df <- data.frame(critic_score=data_scored$Critic_Score)
 ggplot(df, aes(x=critic_score)) + geom_histogram(binwidth=2) + xlab("critic scores")
 ```
 
-As can be seen from the critic scores, there are far less scores below $50$ than above $50$.
+As can be seen from the distribution of the critic scores, it is heavily biased towards the right side, that is, the higher scores. Therefore, the critics seem to be biased towards only rating relatively good games.
+
 
 ## Ratings
 This histogram visualizes the game age ratings in the dataset.
@@ -311,12 +312,11 @@ compare_scores
 We see that the separate model has the largest `elpd` by a significant difference to the pooled and hierarchical models in regards to both of our variables, sales, and scores. Thus the PSIS-LOO method strongly suggests that the separate model produces the most reliable results. Unreliable results for pooled and hierarchical models are likely caused by too much variance between different gaming platforms in terms of sales and scoring. Next, we will continue by analyzing the separate model.
 
 ## Separate model posterior visualization
-We extract posterior draws of sales and scores for different platforms, compute the ratio of sales to scores and visualize the results. The ratio is defined as
-
+We extract posterior draws of sales and scores for different platforms, and then compute the ratio of sales to scores, and visualize the results. We define the ratio as
 $$
 r = \frac{\mu_{sales}}{\hat{\mu}_{score}},
 $$
-where $\hat{\mu}=\mu_{score}/100$ is the normalized score.
+where $\hat{\mu}=\mu_{score}/100$ is the normalized score.  We can interpret the ratio such that when the ratio is lower than the mean of ratios, the critics have overvalued the game, and when it is higher than the mean, the critics have undervalued the game.  A lower variance of ratios indicates that critic scores are better at predicting sales, and higher variance indicates that they are worse at predicting sales.
 
 ```{r, echo = FALSE}
 separate_values <- extract(separate_fit)
