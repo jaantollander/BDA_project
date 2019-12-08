@@ -332,7 +332,7 @@ plot_posterior_for_platform <- function(label) {
 p1 <- plot_posterior_for_platform("PC")
 p2 <- plot_posterior_for_platform("PS3")
 p3 <- plot_posterior_for_platform("Wii")
-p4 <- plot_posterior_for_platform("DS")
+p4 <- plot_posterior_for_platform("3DS")
 ```
 
 Plot posterior draw ratio for platform.
