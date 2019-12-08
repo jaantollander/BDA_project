@@ -25,6 +25,7 @@ Import the required libraries and set Stan options.
 ```{r, message = FALSE}
 library(ggplot2)
 library(gridExtra)
+library(bayesplot)
 library(analogue)
 library(tidyr)
 library(plyr)
@@ -227,16 +228,12 @@ pooled_fit <- rstan::stan(
 ```
 
 ### Convergence analysis
-```{r}
-#print(separate_fit, pars = c("mu_sales", "mu_scores"))
-```
-
-```{r}
-#print(hierarchical_fit)
-```
-
-```{r}
-#print(pooled_fit)
+```{r, message=FALSE}
+grid.arrange(
+  mcmc_rhat_hist(rhat(separate_fit)),
+  mcmc_rhat_hist(rhat(hierarchical_fit)),
+  mcmc_rhat_hist(rhat(pooled_fit))
+)
 ```
 
 Each model's  $\hat{R}$ value is sufficiently close to 1. We can therefore assume that each model's chains have reached approximate convergence.
@@ -414,7 +411,10 @@ p5_observed <- ggplot(df_observed, aes(x=platforms, y=variances_observed)) + geo
 ```
 
 ```{r}
-grid.arrange(p5 + xlab("Fitted variance"), p5_observed + xlab("Dataset variance"), ncol = 1)
+grid.arrange(
+  p5 + xlab("Fitted variance"), 
+  p5_observed + xlab("Dataset variance"), 
+  ncol = 1)
 ```
 
 The fitted variance for the sales to critic scores ratio follows the dataset variance for the most part. The platforms `Wii` and `X360` are the biggest differences. This can be visualized by dropping them from the barplots:
@@ -422,12 +422,23 @@ The fitted variance for the sales to critic scores ratio follows the dataset var
 ```{r}
 variances_observed_drop <- variances_observed[-9][-10]
 variances_fitted_drop <- variances[-9][-10]
-df_observed_drop <- data.frame(platforms=platforms[-9][-10], variances_observed_drop=variances_observed_drop)
-p5_observed_drop <- ggplot(df_observed_drop, aes(x=platforms, y=variances_observed_drop)) + geom_col()
+df_observed_drop <- data.frame(
+  platforms=platforms[-9][-10],
+  variances_observed_drop=variances_observed_drop)
+p5_observed_drop <- ggplot(
+  df_observed_drop, 
+  aes(x=platforms, y=variances_observed_drop)) + geom_col()
 
-df_fitted_drop <- data.frame(platforms=platforms[-9][-10], variances_fitted_drop=variances_fitted_drop)
-p5_fitted_drop <- ggplot(df_fitted_drop, aes(x=platforms, y=variances_fitted_drop)) + geom_col()
-grid.arrange(p5_fitted_drop + xlab("Fitted variance"), p5_observed_drop + xlab("Dataset variance"), ncol = 1)
+df_fitted_drop <- data.frame(
+  platforms=platforms[-9][-10], 
+  variances_fitted_drop=variances_fitted_drop)
+p5_fitted_drop <- ggplot(
+  df_fitted_drop, 
+  aes(x=platforms, y=variances_fitted_drop)) + geom_col()
+grid.arrange(
+  p5_fitted_drop + xlab("Fitted variance"), 
+  p5_observed_drop + xlab("Dataset variance"), 
+  ncol = 1)
 ```
 
 ## Sensitivity analysis for prior choices
