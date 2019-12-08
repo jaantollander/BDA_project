@@ -61,7 +61,7 @@ The dataset consists of *video games sales data* as of December 2016 scraped fro
 * `Critic_Score`: A score given by critics. A number between 0 and 100.
 * `Rating`: Age rating of the game.
 
-In this analysis, we are interested in games released between the years 2009 - 2016. We consider the platforms `N64`, `DC`, `GB` and `WS` statistical anomalies and have excluded them from this report, as they have very little to no actual representation in the dataset during the period of years (2009 - 2016) we analyze the data for.
+In this report we are interested in the relationship between video game sales and critic reviews on the games released between the years 2009 - 2016. We also predict future sales with a posterior predictive distribution. We consider the platforms `N64`, `DC`, `GB` and `WS` statistical anomalies and have excluded them from this report, as they have very little to no actual representation in the dataset during the period of years (2009 - 2016) we analyze the data for.
 
 ## Global sales, release years, platforms and critic scores
 ```{r, echo = FALSE}
@@ -103,7 +103,7 @@ g4 <- ggplot(df, aes(x=critic_score)) + geom_histogram(binwidth=2) + xlab("criti
 grid.arrange(g2, g3, ncol = 1)
 ```
 
-In both of these plot, the gray color indicates all games and the red color indicates games that are scored by a critic. The data indicates that the critics have rated a large percentage of games by total sales, but a smaller percentage by the total number of games. Therefore, critics have not rated many unpopular games.
+In both plots, the gray color indicates all games and the red color indicates games that are scored by a critic. The data indicates that the critics have rated a large percentage of games by total sales, but a smaller percentage by the total number of games. Therefore, critics have not rated many unpopular games.
 
 ```{r}
 grid.arrange(g1, g4, ncol = 2)
@@ -170,10 +170,7 @@ integer_labels
 ```
 
 ## Stan model prior choices
-We give the scores an adjustable prior because it has a scale that is common to each platform, that is, a value between 0 and 100. We chose an informative prior mean of $70$ for the scores, which is reasonably close to the sample mean for `Critic_Score` of `r mean(data_models$Critic_Score)`, which we can see in the histogram above. We set the prior standard deviation to $0.2$ to represent a slight amount of ignorance. We are saying that our best prior guess for the `Critic_Score` mean could be off by a factor of $\exp(0.2)=1.2$. [@Gelman2016]
-
-## Model convergence
-We use the potential scale reduction factor $\hat{R}$ for our Stan model’s convergence analysis. We use the improved version proposed by @Vehtari2019.
+We give the scores an adjustable prior because it has a scale that is common to each platform, that is, a value between 0 and 100. We chose an informative prior with a mean of $70$ for the scores, which is reasonably close to the sample mean for `Critic_Score` of `r mean(data_models$Critic_Score)`. This is visible in the histogram above. We set the prior standard deviation to $0.2$ to represent a slight amount of ignorance. We are saying that our best prior guess for the `Critic_Score` mean could be off by a factor of $\exp(0.2)=1.2$. [@Gelman2016]
 
 ### Separate model
 ```{r, warning=FALSE}
@@ -224,7 +221,10 @@ pooled_fit <- rstan::stan(
   iter=1000, chains=4, refresh=0)
 ```
 
-### Convergence analysis
+## Convergence analysis
+
+We use the potential scale reduction factor $\hat{R}$ for our Stan model’s convergence analysis. We use the improved version proposed by @Vehtari2019.
+
 ```{r, message=FALSE}
 grid.arrange(
   mcmc_rhat_hist(rhat(separate_fit)),
@@ -233,7 +233,7 @@ grid.arrange(
 )
 ```
 
-Each model's  $\hat{R}$ value is sufficiently close to 1. We can therefore assume that each model's chains have reached approximate convergence.
+The Rstan `Rhat` documentation suggest one to use a sample if the $\hat{R}$ value is less than 1.05. Each model's  $\hat{R}$ satisfies this constraint. We can therefore assume that each model's chains have reached approximate convergence.
 
 ## Model selection
 We use the PSIS-LOO -method to assess the predictive performance of the pooled, separate and hierarchical Gaussian models in the video game sales dataset. Computations are performed on the R PSIS-LOO implementation, package `loo`.
@@ -306,6 +306,7 @@ compare_scores
 We see that the separate model has the largest `elpd` by a significant difference to the pooled and hierarchical models in regards to both of our variables, sales, and scores. Thus the PSIS-LOO method strongly suggests that the separate model produces the most reliable results. Unreliable results for pooled and hierarchical models are likely caused by too much variance between different gaming platforms in terms of sales and scoring. Next, we will continue by analyzing the separate model.
 
 ## Separate model posterior visualization
+
 We extract posterior draws of sales and scores for different platforms, and then compute the ratio of sales to scores, and visualize the results. We define the ratio as
 $$
 r = \frac{\mu_{sales}}{\hat{\mu}_{score}},
@@ -380,14 +381,62 @@ q4 = plot_rating("PC")
 ```
 
 ```{r}
-grid.arrange(q1, q2, q3, q4, ncol = 1)
+grid.arrange(q1, q2, q3, q4, ncol=3)
 ```
 
 The barplots are arranged as such that we start from the overall youngest (most games for all ages) playerbase and move into the most adult-oriented platform. The more adult-oriented a platform is, the less variance is has in the barplot above.
 
 ## Posterior predictive checking
 
-Let's compare the fitted posterior to the observed data in the dataset.
+The stan model computes a posterior predictive distribution for both sales and scores and samples predictions from it. We compute the sample mean (sample size of 2000) for each platform and plot it. We check the posterior predictive capability by comparing it to the observed data.
+
+```{r}
+sales_pred <- extract(separate_fit)$sales_pred
+scores_pred <- extract(separate_fit)$scores_pred
+
+n <- length(platforms)
+sales_pred_mu <- rep(NULL, n)
+scores_pred_mu <- rep(NULL, n)
+
+for (i in 1:n) {
+  sales_pred_mu[i] <- mean(sales_pred[,i])
+  scores_pred_mu[i] <- mean(scores_pred[,i])
+}
+```
+
+```{r}
+df.sales <- data.frame(platforms=platforms, preds=sales_pred_mu)
+df.scores <- data.frame(platforms=platforms, preds=scores_pred_mu)
+
+# Sales plotting
+sales_preds_plot <- ggplot(df.sales, aes(x=df.sales$platforms, y=df.sales$preds)) + 
+  geom_col() + 
+  xlab("Predicted") + 
+  ylab("Mean sales")
+observed_mean_sales_by_platform <- group_by(data, Platform) %>% summarize(sales = mean(Global_Sales))
+sales_observed_plot <- ggplot() + 
+  geom_col(aes(x = platforms, y = sales), observed_mean_sales_by_platform) + 
+  xlab("Observed") + 
+  ylab("Mean sales")
+
+# Scores plotting
+scores_preds_plot <- ggplot(df.scores, aes(x=df.scores$platforms, y=df.scores$preds)) + 
+  geom_col() +
+  xlab("Predicted") + 
+  ylab("Mean scores") + ylim(0, 100)
+observed_mean_scores_by_platform <- group_by(data_scored, Platform) %>% summarize(scores = mean(Critic_Score))
+scores_observed_plot <- ggplot() + 
+  geom_col(aes(x = platforms, y = scores), observed_mean_scores_by_platform) + 
+  xlab("Observed") + 
+  ylab("Mean scores") + ylim(0, 100)
+
+grid.arrange(sales_preds_plot, sales_observed_plot)
+grid.arrange(scores_preds_plot, scores_observed_plot)
+```
+
+The posterior predictive distribution follows the observed data very well for both sales and scores.
+
+We compare the fitted posterior distribution to the observed data in the dataset.
 
 ```{r}
 observed_data <- filter(
@@ -409,8 +458,8 @@ p5_observed <- ggplot(df_observed, aes(x=platforms, y=variances_observed)) + geo
 
 ```{r}
 grid.arrange(
-  p5 + xlab("Fitted variance"), 
-  p5_observed + xlab("Dataset variance"), 
+  p5 + xlab("Fitted"), 
+  p5_observed + xlab("Dataset"), 
   ncol = 1)
 ```
 
@@ -433,8 +482,8 @@ p5_fitted_drop <- ggplot(
   df_fitted_drop, 
   aes(x=platforms, y=variances_fitted_drop)) + geom_col()
 grid.arrange(
-  p5_fitted_drop + xlab("Fitted variance"), 
-  p5_observed_drop + xlab("Dataset variance"), 
+  p5_fitted_drop + xlab("Fitted"), 
+  p5_observed_drop + xlab("Dataset"), 
   ncol = 1)
 ```
 

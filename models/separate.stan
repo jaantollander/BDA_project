@@ -21,10 +21,18 @@ model {
 generated quantities {
   vector[N] sales_log_lik;
   vector[N] scores_log_lik;
+  vector[K] sales_pred;
+  vector[K] scores_pred;
   for (i in 1:N) {
     sales_log_lik[i] = normal_lpdf(sales[i] | mu_sales[x[i]], sigma_sales[x[i]]);
   }
   for (i in 1:N) {
     scores_log_lik[i] = normal_lpdf(scores[i] | mu_scores[x[i]], sigma_scores[x[i]]);
+  }
+  for (i in 1:K) {
+    sales_pred[i] = normal_rng(mu_sales[i], sigma_sales[i]);
+  }
+  for (i in 1:K) {
+    scores_pred[i] = normal_rng(mu_scores[i], sigma_scores[i]);
   }
 }
