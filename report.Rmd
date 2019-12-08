@@ -535,24 +535,24 @@ mu_scores_alt <- separate_values_alt$mu_scores / 100
 
 ```{r, echo = FALSE}
 n = length(platforms)
-variances_unif <- rep(NULL, n)
+means_unif <- rep(NULL, n)
 for (i in 1:n) {
   ratios_unif <- mu_sales_unif[,i] / mu_scores_unif[,i]
-  variances_unif[i] <- var(ratios_unif)
+  means_unif[i] <- mean(ratios_unif)
 }
-df <- data.frame(platforms=platforms, variances=variances_unif)
-p5_unif <- ggplot(df, aes(x=platforms, y=variances)) + geom_col() + xlab("uniform")
+df <- data.frame(platforms=platforms, means=means_unif)
+p5_unif <- ggplot(df, aes(x=platforms, y=means)) + geom_col() + xlab("uniform")
 ```
 
 ```{r, echo = FALSE}
 n = length(platforms)
-variances_alt <- rep(NULL, n)
+means_alt <- rep(NULL, n)
 for (i in 1:n) {
   ratios_alt <- mu_sales_alt[,i] / mu_scores_alt[,i]
-  variances_alt[i] <- var(ratios_alt)
+  means_alt[i] <- mean(ratios_alt)
 }
-df <- data.frame(platforms=platforms, variances=variances_alt)
-p5_alt <- ggplot(df, aes(x=platforms, y=variances)) + geom_col() + xlab("mean 50 std 0.15")
+df <- data.frame(platforms=platforms, means=means_alt)
+p5_alt <- ggplot(df, aes(x=platforms, y=means)) + geom_col() + xlab("mean 50 std 0.15")
 ```
 
 ```{r}
