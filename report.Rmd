@@ -63,7 +63,7 @@ The dataset consists of *video games sales data* as of December 2016 scraped fro
 
 In this analysis, we are interested in games released between the years 2009 - 2016. We consider the platforms `N64`, `DC`, `GB` and `WS` statistical anomalies and have excluded them from this report, as they have very little to no actual representation in the dataset during the period of years (2009 - 2016) we analyze the data for.
 
-## Global sales, release years and platforms
+## Global sales, release years, platforms and critic scores
 ```{r, echo = FALSE}
 # This plot visualizes the total global sales per year.
 d1 <- group_by(data, Year_of_Release) %>%
@@ -93,10 +93,10 @@ g3 <- ggplot() +
   geom_col(aes(x = reorder(Platform, -n), y = n), s3, fill = "red") +
   labs(x = "Platform", y = "Total number of games") +
   theme(legend.position = "right")
-```
 
-```{r}
-g1
+#This histogram visualizes counts of the critic scores.
+df <- data.frame(critic_score=data_scored$Critic_Score)
+g4 <- ggplot(df, aes(x=critic_score)) + geom_histogram(binwidth=2) + xlab("critic scores")
 ```
 
 ```{r}
@@ -105,21 +105,18 @@ grid.arrange(g2, g3, ncol = 1)
 
 In both of these plot, the gray color indicates all games and the red color indicates games that are scored by a critic. The data indicates that the critics have rated a large percentage of games by total sales, but a smaller percentage by the total number of games. Therefore, critics have not rated many unpopular games.
 
-## Critic scores
-This histogram visualizes counts of the critic scores.
 ```{r}
-df <- data.frame(critic_score=data_scored$Critic_Score)
-ggplot(df, aes(x=critic_score)) + geom_histogram(binwidth=2) + xlab("critic scores")
+grid.arrange(g1, g4, ncol = 2)
 ```
 
 As can be seen from the distribution of the critic scores, it is heavily biased towards the right side, that is, the higher scores. Therefore, the critics seem to be biased towards only rating relatively good games.
 
 
 ## Ratings
-This histogram visualizes the game age ratings in the dataset.
 ```{r, echo=FALSE}
+# This histogram visualizes the game age ratings in the dataset.
 ratings = c("", "E", "EC", "E10+", "T", "M", "RP")
-g4 <- ggplot() + 
+g5 <- ggplot() + 
   geom_bar(aes(x = factor(Rating, ratings)), data = data) +
   geom_bar(aes(x = factor(Rating, ratings)), data = data_scored, fill = "red") +
   labs(x = "Rating", y = "Total number of games") +
@@ -127,7 +124,7 @@ g4 <- ggplot() +
 ```
 
 ```{r}
-g4
+g5
 ```
 
 We can interpret the game age rating as follows. [@ESRBRatings]
