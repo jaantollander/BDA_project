@@ -474,7 +474,7 @@ The fitted variance for the sales to critic scores ratio $r$ follows the dataset
 
 ```{r}
 means_observed_drop <- means_observed[-9][-10]
-means_fitted_drop <- means[-9][-10]
+means_fitted_drop <- means_all[-9][-10]
 df_observed_drop <- data.frame(
   platforms=platforms[-9][-10],
   means_observed_drop=means_observed_drop)
@@ -572,5 +572,7 @@ Changing the prior for the scores seems to have little effect. Therefore we can 
 ## Discussion of problems and potential improvements
 
 As proven in the previous sections, the model performs very well according to convergence analytics and posterior predictive checking. The model, as it is, currently has one major problem: it does not take the amount of console owners for each platform into account. It assumes each platform to be identical in terms of potential sales. With the knowledge of each platform's consumerbase's size we could likely make the hierarchical model more viable by normalizing the sales-distributions, as they were the separating difference between each platform and led us to use the separate model. Most importantly, this would make the ratio $r$ a more reliable measure of critic overrating particular games.
+
+A potential follow-up to the report could be to find a dataset consisting of `video game platform sales` and applying this data to the `video game sales` data and our Stan model.
 
 # References
