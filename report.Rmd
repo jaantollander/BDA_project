@@ -345,20 +345,23 @@ Plot posterior draw ratio for platform.
 grid.arrange(p1, p2, p3, p4, ncol = 2)
 ```
 
-Plot variances for all platforms.
+Plot means and variances for all platforms.
 ```{r, echo = FALSE}
 n = length(platforms)
+means <- rep(NULL, n)
 variances <- rep(NULL, n)
 for (i in 1:n) {
   ratios <- mu_sales[,i] / mu_scores[,i]
   variances[i] <- var(ratios)
+  means[i] <- mean(ratios)
 }
-df <- data.frame(platforms=platforms, variances=variances)
-p5 <- ggplot(df, aes(x=platforms, y=variances)) + geom_col()
+df <- data.frame(platforms=platforms, variances=variances, means = means)
+p5 <- ggplot(df, aes(x=platforms, y=means)) + geom_col()
+p6 <- ggplot(df, aes(x=platforms, y=variances)) + geom_col()
 ```
 
 ```{r}
-p5
+grid.arrange(p5, p6, nrow = 2)
 ```
 
 We can see that different platforms have more variance when it comes to the relationship between sales and critic scores. In particular, the platforms developed by Nintendo (3DS, DS, Wii, WiiU) have more variance, which could indicate that the consumers for these platforms care less about critic opinions. This finding could be explained due to their age ratings since platforms like Wii and DS have a lot more games made for people of all ages in comparison to a platform like the PS3, which we demonstrate in the histograms below.
